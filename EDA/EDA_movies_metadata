@@ -131,21 +131,50 @@ CONSIDERAZIONI DAGLI SCRIPT EDA
 	minuti. 
 
 
+- Date strane: 4 film sono precedenti al 1888, ma sono corretti: sono i primissimi filmati della 
+	storia. 31 film hanno una data successiva al momento in cui è stato scaricato il dataset.
 
-- Date strane: 4 film sono precedenti al 1888, ma sono corretti: sono i primissimi filmati della storia. 31 film hanno una data successiva al momento in cui è stato scaricato il dataset.
 - Trame segnaposto: "No overview found." compare in 133 film, più varianti come "No Overview".
+	Cosa comporta
+	- Nella pulizia vanno trasformate in valore mancante, come i campi vuoti.
+	- Se non le pulisci, una ricerca testuale sulla trama le trova. Ad esempio, cercando la parola "found" escono 133 film che non c'entrano nulla.
+
+	Limite del controllo
+	Trova solo i segnaposto ripetuti almeno due volte. Una variante scritta in modo unico, ad esempio "Overview not available", comparirebbe in un solo film e lo script non la vedrebbe. È probabile che siano casi rari, ma non è garantito.
+
+
+COSE DA FARE 
+	-sistemare gli id duplicati 
+	-fixare le righe rotte
+	- ricostruire le lingue
+	- eliminare il segnaposto nella trama
 
 Controlli logici
 
-- Film "non usciti" ma con dati da film uscito: 11 hanno incassi e la maggior parte ha voti. Tutti i 229 Rumored hanno una data di uscita già passata. Questo conferma che status è poco affidabile.
-- Released senza data: 78 film. Altri 17 risultano Released con una data nel futuro.
-- Status vuoto: 81 film, quasi tutti con data e voti, quindi in realtà sono usciti.
-- Voti: 190 film hanno media 10 con meno di 10 voti, e 99 hanno media 0 pur avendo voti.
-- Soldi con unità sbagliate: 244 film hanno un budget tra 1 e 999 dollari. Ad esempio Modern Times ha budget 1 e incasso 8,5 milioni, quindi il budget era scritto "in milioni". Ci sono anche incassi di 12 dollari a fronte di budget da 23 milioni.
-- Popolarità senza voti: Justice League e Thor: Ragnarok hanno popularity alta ma 0 voti, perché nel 2017 non erano ancora usciti.
+- Rumored Film:
+	ma con dati da film uscito: 11 hanno incassi e la maggior parte ha voti. Tutti i 229 Rumored hanno una data di uscita già passata. Questo conferma che status è poco affidabile.
+
+- Released Film:
+	78 film non hanno la data di uscita. Altri 17 risultano Released con una data nel futuro.
+
+- Status vuoto:
+	81 film, quasi tutti con data e voti, quindi in realtà sono usciti.
+
+- Voti: 190 film hanno media 10 con meno di 10 voti ( è fattibile, è solo inaffidabile), e 99 hanno 
+	media 0 pur avendo voti ( che è impossibile ) 
+
+- Soldi con unità sbagliate: 244 film hanno un budget tra 1 e 999 dollari. Ad esempio Modern Times ha 
+	budget 1 e incasso 8,5 milioni, quindi il budget era scritto "in milioni". Ci sono anche incassi di 12 dollari a fronte di budget da 23 milioni.
+
+	qui la situazione è un mezzo casino in realtà
+
+
 - Lingue: in 2.764 film la lingua originale non è tra quelle parlate.
+	da correggere solo le query ricadono sulle lingue parlate 
 
 
+COSA FARE:
+	- boh, sono incongruenze logiche e non strutturali
 
 
 Quello che emerge
@@ -167,8 +196,6 @@ Quello che emerge
   - sui film con almeno 10 voti la mediana è 6,3.
 - Durata: il 76% dei film dura tra 70 e 119 minuti. Il 4% ha durata 0 o mancante.
 - Collezioni: il 9,9% dei film fa parte di una saga. La più grande nel dataset è The Bowery Boys con 29 film; James Bond ne ha 26.
-
-Tra le case di produzione, "Columbia Pictures" e "Columbia Pictures Corporation" compaiono come due società diverse, con id diversi. Lo stesso potrebbe valere per altre società: va tenuto presente se una query chiede di raggruppare per casa di produzione.
 
 
 

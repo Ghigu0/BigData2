@@ -2,12 +2,13 @@
 Mechanical checks on movies_metadata.csv: shape, malformed rows, duplicated ids,
 missing values, types, formats, nested fields, ranges and text fields.
 """
+import csv
 from collections import defaultdict
 
 import pandas as pd
 from tabulate import tabulate
 
-from load import (DATASET_DATE, NESTED_COLUMNS, NUMERIC_COLUMNS, is_truncated, is_valid_row,
+from load import (CSV_PATH, DATASET_DATE, NESTED_COLUMNS, NUMERIC_COLUMNS, is_truncated, is_valid_row,
                   load_metadata, parse_literal, print_section, report, shorten, to_number)
 
 EXPECTED_COLUMNS = [
@@ -43,6 +44,44 @@ def check_malformed_rows(df):
     for i in pairs:
         print("  row %d (id %s, %s) + row %d starting with %r"
               % (i, df.at[i, "id"], df.at[i, "original_title"], i + 1, df.at[i + 1, "adult"][:40]))
+
+
+def check_split_records():
+    """
+    Reads the raw file with the csv module, which tells on which lines of the file each record is:
+    a record with fewer fields than the header, followed by one whose fields complete it,
+    is a single film split in two by a line break inside an unquoted text field.
+    """
+    print("\n-- raw file: records with a wrong number of fields")
+    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        records = []
+        first_line = reader.line_num + 1
+        for fields in reader:
+            records.append((first_line, reader.line_num, fields))
+            first_line = reader.line_num + 1
+
+    wrong = [i for i, (_, _, fields) in enumerate(records) if len(fields) != len(header)]
+    print("records: %d, with a number of fields different from %d: %d" % (len(records), len(header), len(wrong)))
+    print(tabulate([[records[i][0], len(records[i][2]), header[len(records[i][2]) - 1]] for i in wrong],
+                   headers=["file line", "fields", "last field filled"], tablefmt="simple"))
+
+    for i in wrong:
+        if i + 1 not in wrong or len(records[i][2]) + len(records[i + 1][2]) - 1 != len(header):
+            continue
+        (_, end, head), (start, _, tail) = records[i], records[i + 1]
+        # the last field of the first part and the first field of the second are the same text
+        split_column = header[len(head) - 1]
+        joined = dict(zip(header, head[:-1] + [head[-1] + "\n" + tail[0]] + tail[1:]))
+        print("\nline %d and line %d are the same film: %d + %d fields, the line break is inside '%s'"
+              % (end, start, len(head), len(tail), split_column))
+        print("  line %d ends with:    %r" % (end, lines[end - 1][-60:]))
+        print("  line %d starts with:  %r" % (start, lines[start - 1][:60]))
+        print("  joined back together: id %s, title %r, release_date %s, vote_count %s"
+              % (joined["id"], joined["title"], joined["release_date"], joined["vote_count"]))
 
 
 def check_ids(df):
@@ -209,6 +248,7 @@ def main():
     df = load_metadata()
     check_shape(df)
     check_malformed_rows(df)
+    check_split_records()
     check_ids(df)
     check_missing_values(df)
     check_types(df)
