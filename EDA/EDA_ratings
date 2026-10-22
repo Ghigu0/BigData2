@@ -3,8 +3,8 @@ STRUTTURA DEL FILE ratings.csv
 Quattro colonne, una riga per voto: "l'utente userId ha dato il voto rating al film movieId nel momento timestamp".
 I voti vengono da MovieLens (sito diverso da TMDB).
 
-    userId,movieId,rating,timestamp
-    1,110,1.0,1425941529
+    userId,	movieId,	rating,		timestamp
+    1,		110,		1.0,		1425941529
 
 - userId
 	Identificativo dell'utente di MovieLens (anonimo: non c'è nessun'altra informazione sugli utenti)
@@ -19,22 +19,13 @@ I voti vengono da MovieLens (sito diverso da TMDB).
 - timestamp
 	Momento del voto, in secondi dal 1° gennaio 1970 (formato Unix): 1425941529 = 9 marzo 2015
 
-ratings_small.csv ha la stessa struttura ed è la versione ridotta per lo sviluppo.
-
-
-
-Script: EDA/ratings/check_ratings.py  (impiega circa un minuto: ratings.csv ha 26 milioni di righe)
-
-
 
 CONSIDERAZIONI DAGLI SCRIPT EDA
 
 
 - Struttura (sezione 1):
-	ratings.csv: 26.024.289 righe; ratings_small.csv: 100.004 righe.
-	pandas legge userId, movieId e timestamp come interi e rating come decimale:
-	quindi tutti i valori sono numeri. Nessun valore mancante.
-	Righe che finiscono con \r\n (formato Windows), gestito da pandas senza problemi.
+ Nessun valore mancante.
+	
 
 - Valori (sezione 2):
 	rating ha solo i 10 valori attesi (0,5 - 1 - ... - 5), nessun valore fuori scala.
