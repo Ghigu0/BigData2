@@ -1,0 +1,273 @@
+STRUTTURA DEL DATABASE MONGODB
+
+
+Collezioni: 2
+	movies    ~45.400 documenti, uno per film (TMDB)
+	ratings   ~26 milioni di documenti, uno per voto (MovieLens)
+
+
+IDEA GENERALE
+In MongoDB non ci sono JOIN né foreign key: le relazioni si gestiscono in due modi.
+	- embedding:    i dati collegati stanno DENTRO il documento padre (array / sotto-documenti).
+	                Si legge tutto in una volta, ma un documento ha un limite di 16 MB.
+	- referencing:  si salva solo l'id dell'altro documento (come una foreign key "a mano").
+	                Serve per relazioni enormi, ma per unire i dati serve $lookup o Python.
+
+Le 10 query della Part 2 partono quasi tutte dal film: registi, attori, generi, collezione,
+lingue, trama. Quindi:
+	- un documento "film" ricco, con dentro tutto quello che riguarda il film (embedding)
+	- i voti a parte, perché sono 26 milioni (referencing)
+
+
+
+1. COLLEZIONE movies
+
+Un documento per film, unisce movies_metadata.csv, credits.csv, keywords.csv e l'id MovieLens di links.csv.
+
+- _id
+	id TMDB del film (int). Lo usiamo come _id al posto dell'ObjectId automatico:
+	è già univoco è la chiave che usano tutti i file del dataset
+	e così il collegamento dai voti è diretto (ratings.movie_id = movies._id).
+
+- imdb_id            string, con prefisso "tt" (es. "tt0114709")
+- movielens_id       int, il movieId di links.csv collegato a questo film (null se non c'è)
+
+- Campi semplici
+	title, original_title       string
+	original_language           string, codice ISO 639-1 (es. "en")
+	overview, tagline           string (null se mancano; "No overview found." e varianti -> null)
+	status                      string
+	adult, video                bool
+	budget, revenue             int, in USD (0 -> null: 0 nel dataset vuol dire "non noto"; anche i valori sotto 1.000 -> null)
+	runtime                     int, minuti (0 -> null)
+	popularity                  double
+	vote_average                double (0-10), null se è 0 con almeno un voto
+	vote_count                  int
+	release_date                Date (BSON), null se manca
+	homepage                    string, null se manca
+	poster_path                 string, percorso della locandina sul sito di TMDB (null se manca)
+
+- Campi embedded (array e sotto-documenti)
+	L'ordine degli array è quello del file originale: serve per la query 5,
+	dove il "genere principale" è il primo elemento di genres.
+
+	genres                  [{id, name}]
+	production_companies    [{id, name}]
+	production_countries    [{iso_3166_1, name}]
+	spoken_languages        [{iso_639_1, name}]      (i 59 nomi di lingua vuoti ricostruiti dal codice,
+	                                                  original_language aggiunta quando manca)
+	belongs_to_collection   {id, name, poster_path, backdrop_path} oppure null
+	keywords                [{id, name}]             (da keywords.csv, già pulite)
+	cast                    [{id, name, gender, character, order, cast_id, credit_id, profile_path}]   (da credits.csv)
+	crew                    [{id, name, gender, department, job, credit_id, profile_path}]             (da credits.csv)
+
+	Dentro cast e crew "id" è la PERSONA, non il film (come nel file originale).
+
+
+
+Valori mancanti, nomi e generi delle persone: le regole di pulizia sono in Population_script/report_pulizia.txt.
+
+
+Perché embedding per cast, crew, keywords, generi, ...
+	- Sono relazioni "one-to-few": in media 12,4 attori e 10,2 persone di crew per film,
+	  al massimo 313 attori e 435 crew. Il documento più grande pesa circa 100 KB,
+	  molto sotto il limite di 16 MB.
+	- Si leggono sempre insieme al film. Le query 1, 2, 3, 6 e 8 lavorano su attori e registi
+	  dello STESSO film: con cast e crew nello stesso documento le coppie attore-attore e
+	  regista-attore si trovano senza nessun $lookup.
+	- Il dataset è statico: nome e genere di una persona sono ripetuti in ogni suo film,
+	  ma non dovendo mai aggiornarli la duplicazione non crea problemi.
+
+
+Alternativa scartata: collezione "people" separata
+
+	Come sarebbe stata
+	L'alternativa era separare le persone dai film, come si farebbe in un database relazionale
+	(tabella delle persone + tabella di collegamento film-persona, perché la relazione è molti-a-molti:
+	un film ha tanti attori e un attore recita in tanti film).
+	Ci sarebbe stata una terza collezione, people, con un documento per ogni persona e solo i dati
+	che appartengono alla persona:
+
+		{_id: 31, name: "Tom Hanks", gender: 2, profile_path: "/pQFoyx7rp09CJTAb932F2g8Nlho.jpg"}
+
+	Dentro i film, cast e crew avrebbero tenuto solo i dati della partecipazione a quel film
+	(personaggio, posizione nei titoli, ruolo) e l'id della persona come riferimento:
+
+		cast: [{person_id: 31, character: "Woody (voice)", order: 0, cast_id: 14, credit_id: "52fe4284c3a36847f8024f95"}, ...]
+
+	I vantaggi
+	Il primo è che ogni persona è scritta una volta sola. Con la nostra struttura nome, genere e foto
+	di un attore sono ripetuti in ogni suo film: Bess Flowers, per esempio, compare in 240 film, quindi
+	i suoi dati sono copiati 240 volte. Con people sarebbero scritti una volta.
+	Il secondo, più importante, è la coerenza: se nome e genere stanno in un posto solo, non possono
+	essere diversi da un film all'altro. Nell'EDA abbiamo trovato proprio questo problema
+	(12 persone con genere specificato in alcuni film e non in altri, 15 persone con il nome scritto
+	in due alfabeti diversi): con people sarebbe impossibile per costruzione.
+	Il terzo è che correggere una persona vorrebbe dire modificare un solo documento, invece di
+	cercarla e modificarla in tutti i film in cui compare.
+
+	Perché l'abbiamo scartata
+	Tutti e tre i vantaggi riguardano soprattutto la scrittura e la modifica dei dati, mentre il nostro
+	dataset è statico: lo carichiamo una volta e poi lo leggiamo soltanto. Nessuna persona verrà mai
+	modificata, quindi il rischio che le copie diventino diverse tra loro non esiste.
+	Il problema della coerenza, poi, lo risolviamo comunque durante la pulizia: prima di inserire
+	scegliamo un solo nome e un solo genere per ogni id e li scriviamo uguali in tutti i film.
+	Il vantaggio principale di people lo otteniamo quindi lo stesso, senza dover dividere i dati.
+
+	Dall'altra parte, separare le persone avrebbe reso più lente le letture. Le query non partono mai
+	dalle persone ma sempre dai film, e hanno bisogno dei dati della persona insieme a quelli del film.
+	In MongoDB l'unico modo per unire due collezioni è $lookup, che per ogni documento fa una ricerca
+	nell'altra collezione ed è l'operazione più costosa di una pipeline.
+	In alcune query il costo sarebbe piccolo: nelle query 1, 2, 3 e 8 i calcoli si fanno sugli id e
+	il nome serve solo per stampare i primi 10-20 risultati, quindi basterebbero pochi $lookup alla fine.
+	Ma nella query 6 serve il genere di ognuno dei primi 5 attori di ogni film: circa 45.000 film
+	per 5 attori, cioè più di 200.000 $lookup solo per leggere un numero che con l'embedding è già lì.
+
+	In sintesi: people è la scelta giusta quando i dati delle persone cambiano spesso e vanno tenuti
+	allineati. Qui non cambiano mai e vengono sempre letti insieme al film, quindi seguiamo la regola
+	di MongoDB "i dati che si leggono insieme si salvano insieme" e accettiamo di ripetere i dati
+	della persona dentro ogni film (denormalizzazione).
+
+
+
+2. COLLEZIONE ratings
+
+Un documento per voto, da ratings.csv (il file completo, non ratings_small).
+
+	{
+		_id:        ObjectId (automatico)
+		user_id:    int
+		movie_id:   int        <- _id del film in movies (id TMDB, NON il movieId di MovieLens)
+		rating:     double     (0,5 - 5)
+		timestamp:  Date       (convertito dal formato Unix)
+	}
+
+movie_id viene tradotto durante il caricamento: ratings.movieId -> links.movieId -> links.tmdbId.
+
+
+
+
+Vengono scartati i voti che non si collegano correttamente a un film (circa lo 0,19%):
+i casi e i numeri sono in Population_script/report_pulizia.txt.
+
+
+
+
+
+Perché referencing e non embedding
+	- Film -> voti è una relazione "one-to-squillions": un film arriva a 91.921 voti,
+	  un utente a 18.276. Array così grandi dentro movies renderebbero i documenti enormi
+	  (e ogni query sui film si porterebbe dietro tutti i voti).
+	- Quindi ogni voto è un documento e tiene il riferimento al film (movie_id).
+I motivi veri sono questi:
+
+1. Rallenterebbe tutte le altre query. I voti sono circa 26 milioni × 65 byte ≈ 1,7 GB. La collezione movies passerebbe da circa 200 MB a quasi 2 GB. Le query dalla 1 alla 9 scorrono tutti i film e i voti non li usano, ma MongoDB legge comunque il documento intero, quindi diventerebbero circa 10 volte più lente. Sulla VM, che ha poca potenza, si sente.
+2. La query sui voti è per utente, non per film. La domanda 10 raggruppa per utente. Con i voti dentro i film bisognerebbe comunque "esplodere" con $unwind tutti gli array per ricostruire 26 milioni di righe. Tanto vale che siano già documenti separati.
+3. Sono array che crescono senza limite. In un sistema reale arrivano voti nuovi ogni giorno e i documenti crescerebbero all'infinito. Gli articoli consigliati dall'assignment chiamano questo caso one-to-squillions e la regola è il riferimento.
+
+
+
+Collezioni che NON creiamo
+	- users:   degli utenti si conosce solo l'id, che è già dentro ogni voto.
+	- links:   serve solo come tabella di traduzione movieId -> tmdbId durante il caricamento;
+	           dopo, l'id MovieLens resta come movielens_id dentro il film.
+
+Alternativa scartata: copiare i generi dentro ogni voto
+	Renderebbe la query 10 (generi distinti votati da ogni utente) più semplice, ma ripete
+	i generi su 26 milioni di documenti (circa +0,5 GB). Per la query 10 i generi si prendono
+	da movies: con un $lookup sull'_id del film oppure in Python con un dizionario
+	movie_id -> generi (i tips dell'assignment consigliano proprio i dizionari per i lookup).
+
+ratings_small
+
+
+
+
+3. INDICI
+
+movies
+	_id                                       automatico
+	{overview: "text", tagline: "text"}       indice di testo per la query 7 ("noir", "neo-noir"):
+	                                          $text funziona solo con questo indice, e MongoDB
+	                                          ne permette uno solo per collezione
+
+ratings
+	{user_id: 1}      la query 10 raggruppa i voti per utente
+	{movie_id: 1}     per trovare i voti di un film e per i collegamenti con movies
+
+Niente indici su cast e crew: le query li scorrono tutti con $unwind, un indice non aiuterebbe.
+
+
+
+4. TIPI
+
+	int        id, conteggi, budget, revenue, runtime, order, cast_id
+	double     rating, vote_average, popularity
+	Date       release_date, timestamp (l'assignment chiede date coerenti e consiglia ISODate)
+	bool       adult, video
+	string     tutto il resto (imdb_id resta stringa per non perdere gli zeri iniziali)
+
+
+
+5. ESEMPI DI DOCUMENTI
+
+movies (Toy Story, abbreviato)
+
+	{
+		_id: 862,
+		imdb_id: "tt0114709",
+		movielens_id: 1,
+		title: "Toy Story",
+		original_title: "Toy Story",
+		original_language: "en",
+		overview: "Led by Woody, Andy's toys live happily in his room until ...",
+		tagline: null,
+		status: "Released",
+		adult: false,
+		video: false,
+		budget: 30000000,
+		revenue: 373554033,
+		runtime: 81,
+		popularity: 21.946943,
+		vote_average: 7.7,
+		vote_count: 5415,
+		release_date: ISODate("1995-10-30"),
+		homepage: "http://toystory.disney.com/toy-story",
+		poster_path: "/rhIRbceoE9lR4veEXuwCC2wARtG.jpg",
+		genres: [{id: 16, name: "Animation"}, {id: 35, name: "Comedy"}, {id: 10751, name: "Family"}],
+		production_companies: [{id: 3, name: "Pixar Animation Studios"}],
+		production_countries: [{iso_3166_1: "US", name: "United States of America"}],
+		spoken_languages: [{iso_639_1: "en", name: "English"}],
+		belongs_to_collection: {
+			id: 10194,
+			name: "Toy Story Collection",
+			poster_path: "/7G9915LfUQ2lVfwMEEhDsn3kT4B.jpg",
+			backdrop_path: "/9FBwqcd9IRruEDUrTdcaafOMKUq.jpg"
+		},
+		keywords: [{id: 931, name: "jealousy"}, {id: 4290, name: "toy"}, ...],
+		cast: [
+			{id: 31, name: "Tom Hanks", gender: 2, character: "Woody (voice)", order: 0,
+			 cast_id: 14, credit_id: "52fe4284c3a36847f8024f95", profile_path: "/pQFoyx7rp09CJTAb932F2g8Nlho.jpg"},
+			{id: 12898, name: "Tim Allen", gender: 2, character: "Buzz Lightyear (voice)", order: 1,
+			 cast_id: 15, credit_id: "52fe4284c3a36847f8024f99", profile_path: "/uX2xVf6pMmPepxnvFWyBtjexzgY.jpg"},
+			...
+		],
+		crew: [
+			{id: 7879, name: "John Lasseter", gender: 2, department: "Directing", job: "Director",
+			 credit_id: "52fe4284c3a36847f8024f49", profile_path: "/7EdqiNbr4FRjIhKHyPPdFfEEEFG.jpg"},
+			...
+		]
+	}
+
+ratings
+
+	{
+		_id: ObjectId("..."),
+		user_id: 1,
+		movie_id: 197,          <- movieId 110 di MovieLens = Braveheart, tmdbId 197
+		rating: 1.0,
+		timestamp: ISODate("2015-03-09T22:52:09")
+	}
+
+
+
