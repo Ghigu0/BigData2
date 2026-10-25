@@ -1,21 +1,10 @@
 PULIZIA DEI DATI E POPOLAMENTO DEL DATABASE
 
-
 File
 	cleaning.py     le regole di pulizia, una funzione per regola
 	populate.py     legge i CSV, applica le regole, costruisce i documenti e li inserisce in MongoDB
 
-Esecuzione
-	python Population_script/populate.py            dataset completo (links.csv, ratings.csv)
-	python Population_script/populate.py --small    links_small.csv e ratings_small.csv, per una prova veloce
 
-Approccio
-	Un solo script che pulisce i dati in memoria mentre li carica, senza scrivere CSV puliti intermedi.
-	- I campi annidati (generi, cast, crew, keywords, ...) sono scritti come liste Python dentro il CSV:
-	  scrivere un CSV pulito vorrebbe dire riscriverli come testo e rileggerli con ast.literal_eval.
-	- ratings.csv pesa circa 700 MB: una copia pulita raddoppierebbe lo spazio senza aggiungere nulla.
-	- Le regole stanno comunque separate in cleaning.py, quindi ogni punto di questo report
-	  corrisponde a una funzione del codice.
 
 Ordine delle operazioni (populate.py)
 	1. connessione con DbConnector (1 = docker, 2 = VM)
@@ -33,7 +22,6 @@ Ordine delle operazioni (populate.py)
 	un documento sbagliato fa fallire l'inserimento.
 
 
-
 CONVENZIONI GENERALI
 
 	valore singolo mancante   -> null (il campo c'è sempre: tutti i documenti hanno la stessa forma)
@@ -44,29 +32,23 @@ CONVENZIONI GENERALI
 
 
 
-1. movies_metadata.csv
+MOVIES_METADAT
 
-1.1 Righe spezzate (3 film)
+1 Righe spezzate (3 film)
 	Midnight Man (82663), Mardock Scramble: The Third Exhaust (122662) e Avalanche Sharks (249260) sono
-	spezzati in due righe da un a capo dentro overview, scritto senza virgolette nel CSV.
-	Il file viene letto con il modulo csv: un record con meno dei 24 campi dell'intestazione, seguito da
-	un record che lo completa, viene riunito. La trama è ricostruita con l'a capo originale.
-	Così si recuperano i 3 film, che hanno anche credits, keywords e voti.
-	-> "films split in two rows, joined back": 3
+	spezzati in due righe da un a capo dentro overview, scritto senza virgolette nel CSV. Queste righe vengono unite per ricostruire il record originale
 
-1.2 Id duplicati (29 id, 30 righe in più)
-	Si tiene l'ultima copia nel file (drop_duplicates("id", keep="last")).
+2 Id duplicati (29 id, 30 righe in più)
+	Si tiene l'ultima copia nel file.
 	- 16 id hanno copie identiche: tenere l'una o l'altra è uguale.
 	- 2 id differiscono per vote_count: la copia più avanti nel file ha più voti, quindi è la più recente.
 	- 11 id differiscono solo per popularity: non c'è un modo diretto per sapere quale sia più recente.
 	  Seguendo l'indizio dei 2 casi precedenti (le righe in fondo al file sono state scaricate dopo)
 	  si tiene anche qui l'ultima copia. È un'ipotesi ragionevole basata su 2 casi, non una certezza,
 	  e le differenze di popularity sono quasi sempre piccole.
-	Una sola regola per tutti i casi, deterministica.
-	Da EDA_links: i duplicati nascono dai 29 tmdbId usati da più movieId in links.csv (vedi 4.3).
-	-> "duplicated ids": 29, "duplicated rows dropped (keep the last copy)": 30
 
-1.3 Budget e revenue
+
+3 Budget e revenue
 	- 0 -> null: nel dataset 0 vuol dire "non noto" (budget manca nell'80% dei film, revenue nell'84%).
 	- Valori tra 1 e 999 -> null: un film non costa 5 dollari. Sono errori di inserimento su TMDB fatti
 	  in modi diversi: alcuni valori sono in milioni (Every Which Way But Loose: budget 5, revenue 85),
@@ -79,20 +61,17 @@ CONVENZIONI GENERALI
 	-> "budget 0 -> null": 36.553, "revenue 0 -> null": 38.035
 	-> "budget between 1 and 999 -> null": 244, "revenue between 1 and 999 -> null": 154
 
-1.4 Runtime
+4 Runtime
 	0 -> null (come per i soldi, 0 vuol dire "non noto"); anche i valori vuoti diventano null.
 	Le 16 durate sopra i 600 minuti restano: sono serie TV (es. Centennial, 1.256 minuti), il valore è vero.
-	-> "runtime 0 -> null": 1.558 (più i valori vuoti: in tutto 1.815 film senza durata, come nell'EDA)
+	-> "runtime 0 -> null": 1.558 (più i valori vuoti: in tutto 1.815 film senza durata)
 
-1.5 vote_average
+5 vote_average
 	- media 0 con almeno un voto -> null (99 film): è impossibile, perché il voto minimo su TMDB è 0,5.
 	  La media non è stata calcolata.
-	- media 0 con 0 voti: resta 0, è coerente con vote_count = 0.
-	- media 10 con pochi voti (190 film con meno di 10 voti): resta, è possibile ma poco affidabile.
-	  Va gestita nelle query con una soglia minima di vote_count (le query 7 e 8 la chiedono già).
-	-> "vote_average 0 with vote_count > 0 -> null": 99
+	- "vote_average 0 with vote_count > 0 -> null": 99
 
-1.6 Trame segnaposto -> null
+6 Trame segnaposto -> null
 	Alcune trame non sono vuote ma contengono una frase standard di TMDB al posto della trama.
 	Se restassero, la ricerca testuale della query 7 le troverebbe (cercando "found" uscirebbero 133 film).
 	Testi trattati come trama mancante (confronto senza distinguere maiuscole e minuscole):
@@ -111,69 +90,65 @@ CONVENZIONI GENERALI
 	  scritto nella lingua stessa (es. "Español").
 	  -> "empty language names rebuilt from the code": 498 (oggetti lingua corretti)
 	- Se original_language non è tra le lingue parlate, viene aggiunta in fondo alla lista, con il nome
-	  preso dallo stesso dizionario codice -> nome. Vale sia per le liste che hanno altre lingue
-	  (2.753 film; l'EDA ne contava 2.764 includendo gli 11 film con original_language vuota) sia per le
-	  liste vuote (3.827 film). La lingua originale di un film è per definizione parlata nel film.
-	  Limite: si assume che original_language sia corretta. Dove l'errore è in original_language
-	  si aggiunge una lingua non parlata, e dai dati non si può sapere in quanti casi succede.
-	  Le query della consegna non usano spoken_languages (la 9 usa original_language).
+	  preso dallo stesso dizionario codice -> nome. 
+	  La lingua originale di un film è per definizione parlata nel film.
+
 	  -> "original_language added to spoken_languages (list not empty)": 2.753
 	  -> "original_language added to spoken_languages (empty list)": 3.827
 
-1.8 Altri campi
+8 Altri campi
 	- adult, video: "True"/"False" -> bool.
 	- release_date: testo AAAA-MM-GG -> Date; vuota -> null.
 	- imdb_id, homepage, tagline, status, poster_path, title, original_language: vuoti -> null.
 	- belongs_to_collection: oggetto o null.
-	- L'ordine degli array è quello del file: per la query 5 il genere principale è il primo di genres.
+
 
 1.9 Cosa NON modifichiamo (e perché)
 	Sono incongruenze logiche, non strutturali: non si possono correggere dai dati e i valori
 	potrebbero anche essere veri. Restano nel database e vanno ricordate nelle query.
 	- status poco affidabile: 229 film Rumored con data passata e voti, 81 film con status vuoto (null),
 	  17 Released con data futura. status non si usa per scartare film.
-	- 4 film precedenti al 1888 (sono i primi filmati della storia) e 31 film con data successiva al
-	  momento in cui è stato scaricato il dataset.
-	- 16 film con durata sopra i 600 minuti (serie TV).
-	- popularity: è una "fotografia" del 2017, nessuna correzione.
+	- 31 film con data successiva al momento in cui è stato scaricato il dataset.
+	
 
 
+KEYWORD.CSV
 
-2. keywords.csv
-
-2.1 Duplicati
+1 Duplicati
 	985 id compaiono più di una volta, con copie sempre identiche: si tiene una copia.
 	-> "duplicated rows dropped": 987
 
-2.2 Spazi nei nomi
+2 Spazi nei nomi
 	Si tolgono spazi e \xa0 all'inizio e alla fine dei nomi (68 keyword).
 	-> "names with spaces at the start or end stripped": 68
+	Gli spazi non si vedono, ma per MongoDB 'bellhop' e 'bellhop\xa0' sono due stringhe diverse:
+	una ricerca esatta sul nome non troverebbe la versione con lo spazio, e raggruppando per nome
+	la stessa parola comparirebbe due volte con conteggi diversi. È un errore invisibile, perché
+	guardando i risultati le due versioni sembrano identiche. Togliere gli spazi serve anche a far
+	emergere le keyword con lo stesso nome e id diversi, unite al punto 4.
 
-2.3 Keyword con nome vuoto
-	La keyword 13091 ha come nome solo '\xa0': non significa nulla e viene tolta dai 4 film che la usano.
-	-> "keywords with an empty name dropped": 1, "film-keyword links removed (empty name)": 4
 
-2.4 Stessa parola con due id
-	Dopo aver tolto gli spazi, 6 parole hanno due id: la versione pulita e quella con lo spazio
+3 Stessa parola con due id
+	Dopo aver tolto gli spazi, 6 parole uguali  hanno due id: la versione pulita e quella con lo spazio
 	(infatuation, telephone call, tape recording, bellhop, poseidon, hipster). Per TMDB sono keyword
 	diverse, ma per chi legge sono la stessa parola: senza unirle {"keywords.name": "bellhop"}
 	troverebbe 1 film invece di 5. Si usa l'id della versione scritta senza spazi.
 	-> "keyword ids merged into the id of the same name without spaces": 6
 
-2.5 Film senza keywords
+4 Film senza keywords
 	I film senza riga in keywords.csv (School's out, 401840) o con lista vuota hanno keywords = [].
 	-> "films without keywords": 14.341 (31,6%)
 
 
 
-3. credits.csv
+CREDITS.CSV
 
-3.1 Duplicati
+1 Duplicati
 	43 id compaiono più di una volta. 36 hanno copie identiche; negli altri 7 cambia solo l'ordine
 	delle persone nella crew (stessi credit_id, nessun valore diverso). Si tiene la prima copia.
 	-> "duplicated rows dropped": 44
 
-3.2 Un solo nome e un solo genere per persona
+2 Un solo nome e un solo genere per persona
 	Nella struttura scelta i dati della persona sono ripetuti in ogni suo film (embedding). Per non
 	avere la stessa persona scritta in modi diversi, prima di inserire si sceglie per ogni id:
 	- il nome: tolti spazi, tab e \xa0 all'inizio e alla fine, poi il nome più frequente tra i suoi
@@ -191,14 +166,14 @@ CONVENZIONI GENERALI
 	-> "cast/crew entries with gender 0 -> set gender of the person": 50 / 9
 	-> "cast/crew entries with gender 0 -> null": 223.713 / 272.023
 
-3.3 Doppioni nel cast
+3 Doppioni nel cast
 	4 persone compaiono due volte nello stesso film con lo stesso personaggio (vuoto): sono veri
 	doppioni e si tiene la prima voce. Le persone con più personaggi diversi nello stesso film
 	(1.152) restano: un attore può avere più ruoli. Per contare i film di un attore vanno contate
 	le coppie (film, attore) distinte.
 	-> "cast entries duplicated (same person and character in a film), removed": 4
 
-3.4 Altri campi
+4 Altri campi
 	- character vuoto -> null.
 	- profile_path mancante -> null.
 	- order, cast_id e credit_id restano come nel file. order non parte sempre da 0 e ha buchi e
@@ -206,32 +181,30 @@ CONVENZIONI GENERALI
 	- I 19 attori finiti nel reparto 'Actors' della crew restano lì: le query sui registi usano
 	  job = 'Director', che è sempre nel reparto Directing.
 
-3.5 Film senza credits
+5 Film senza credits
 	School's out (401840) non ha una riga in credits.csv: cast = [] e crew = [].
 	Con la ricucitura delle righe spezzate tutti i film di credits.csv sono in movies.
 	-> "films without a row in credits.csv": 1, nessun "films not in movies, ignored"
 
 
-
-4. links.csv
+LINKS.CSV
 
 links.csv serve solo durante il caricamento, come tabella di traduzione
 ratings.movieId -> links.tmdbId = movies._id. Il movieId rimasto per ogni film diventa movielens_id.
 
-4.1 imdbId letto come testo, per non perdere gli zeri iniziali (0114709).
 
-4.2 movieId senza tmdbId (219): non si possono collegare a nessun film e vengono scartati.
+1 movieId senza tmdbId (219): non si possono collegare a nessun film e vengono scartati.
 
-4.3 tmdbId condivisi (29 tmdbId, 59 movieId)
+2 tmdbId condivisi (29 tmdbId, 59 movieId)
 	29 tmdbId sono assegnati a più movieId con codici IMDb diversi, cioè film diversi per MovieLens.
 	In ogni gruppo esattamente un movieId ha lo stesso codice IMDb del film in movies_metadata:
 	si tiene quello e si scartano gli altri 30. I loro voti sono di un altro film (spesso omonimo)
 	e finirebbero sul film sbagliato, come "Romance" votato dal 1999 ma uscito nel 2012 (EDA_ratings).
 
-4.4 tmdbId non presenti in movies (161 movieId): il film non è nel dataset, si scartano.
-	Erano 164 nell'EDA: i 3 film con la riga spezzata ora sono recuperati.
+3 tmdbId non presenti in movies (161 movieId): il film non è nel dataset, si scartano.
+	
 
-4.5 I collegamenti si fanno su tmdbId, non su imdbId: in 65 casi singoli i codici IMDb di links e
+4 I collegamenti si fanno su tmdbId, non su imdbId: in 65 casi singoli i codici IMDb di links e
 	movies_metadata sono diversi e non si può dire quale dei due sia sbagliato.
 
 	-> "movieIds discarded, movieId without tmdbId": 219
@@ -241,14 +214,12 @@ ratings.movieId -> links.tmdbId = movies._id. Il movieId rimasto per ogni film d
 
 
 
-5. ratings.csv
+RATING.CSV
 
 Il file è strutturalmente pulito (nessun valore mancante, nessun duplicato, voti tra 0,5 e 5):
 l'unica pulizia riguarda il collegamento ai film.
 	- movieId tradotto nell'id TMDB del film con il dizionario di links pulito (movie_id = movies._id).
 	- timestamp Unix -> Date (UTC).
-	- Si usa ratings.csv e non ratings_small.csv: i due file non vanno mescolati, perché lo stesso
-	  userId indica persone diverse (EDA_ratings). ratings_small serve solo per la prova con --small.
 
 Voti scartati perché non collegabili correttamente a un film:
 
@@ -260,14 +231,10 @@ Voti scartati perché non collegabili correttamente a un film:
 Voti inseriti: 25.974.522.
 
 Restano nel database, perché non sono errori:
-	- voti dati prima dell'uscita del film (anteprime, festival), tranne quelli dei movieId sbagliati
-	  già scartati al punto 4.3;
-	- utenti che danno sempre lo stesso voto;
-	- voti senza mezza stella prima del 2003 (le mezze stelle non esistevano ancora su MovieLens).
+	- voti dati prima dell'uscita del film (anteprime, festival)
 
 
-
-6. RISULTATO
+RISULTATO
 
 	movies     45.433 documenti   (45.463 righe lette - 30 duplicati; le 3 righe spezzate già riunite)
 	ratings    25.974.522 documenti

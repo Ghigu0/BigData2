@@ -1,0 +1,117 @@
+NOTE SULLE QUERY DELLA PART 2 (da tenere presenti nel report)
+
+File
+	queries.py      le 10 query, un metodo per query (query_1 ... query_10)
+
+	python Query/queries.py          tutte le query (~1,5 minuti con il dataset completo, sul docker locale)
+	python Query/queries.py 1 7      solo le query scelte
+
+	Tempi sul docker locale: Q2 ~60 s (6,5 milioni di coppie di attori), Q10 ~21 s, tutte le altre sotto i 3 s.
+
+
+SCELTE GENERALI
+
+1 Mediana esatta
+	MongoDB 7.0 ha $median, ma solo con method "approximate": con un numero pari di valori
+	restituisce il valore centrale più basso invece della media dei due centrali
+	(la mediana di [1, 2, 3, 4] risulta 2, non 2,5; quella di [100, 250, 7000, 8000, 31000, 90000]
+	risulta 7000 invece di 7500).
+	Per questo la mediana è calcolata con un'espressione di aggregazione (funzione median() in queries.py):
+	i valori vengono ordinati con $sortArray e si fa la media dei due centrali. Si usa nelle query 1, 4 e 5.
+	I valori null vengono ignorati.
+
+2 Valori mancanti
+	Budget, revenue, runtime e vote_average mancanti sono null (vedi Population_script/report_pulizia.txt).
+	$avg, $sum, $min e $max di MongoDB ignorano i null: le medie e i totali sono calcolati solo sui
+	valori noti. Dove conta (revenue) le tabelle riportano anche su quanti film è calcolato il valore
+	(colonna "movies with revenue").
+
+3 Persone contate una volta per film
+	Un attore con più personaggi nello stesso film compare più volte nel cast (1.152 casi, vedi
+	report_pulizia). Per contare i film di una persona si prendono le persone distinte di ogni film
+	($setUnion su {id, name}): funzione people() in queries.py. Lo stesso vale per i registi
+	(un film può avere più registi, ognuno contato una volta).
+
+4 Ordinamenti in caso di parità
+	Ogni ordinamento ha un criterio di spareggio fisso (di solito l'_id), così i risultati sono
+	identici a ogni esecuzione.
+
+
+QUERY PER QUERY
+
+Q1 Registi con la mediana di revenue più alta
+	- La soglia "≥ 5 film" vale per i film con revenue nota, non per i film diretti in totale:
+	  la revenue è nota solo nel 16% dei film, e con la soglia sui film totali la mediana potrebbe
+	  basarsi su 1 o 2 incassi. La tabella riporta entrambi i conteggi.
+	- La media di vote_average è calcolata su tutti i film diretti.
+	- Eric Darnell e Tom McGrath hanno la stessa mediana: sono co-registi degli stessi film (Madagascar).
+
+Q2 Coppie di attori con ≥ 3 film insieme
+	- Doppio $unwind del cast dello stesso film, tenendo solo le coppie con id_a < id_b
+	  (ogni coppia una volta sola, nessun attore in coppia con sé stesso).
+	- Le coppie con almeno 3 film sono 45.650: lo script stampa il numero totale e le prime 20.
+	- È la query più pesante (circa 6,5 milioni di coppie intermedie): serve allowDiskUse.
+	  Con l'embedding di cast nel film non serve nessun $lookup.
+
+Q3 Attori (≥ 10 film) con più generi distinti
+	- 10.405 attori hanno almeno 10 film; 22 di loro hanno recitato in tutti i 20 generi,
+	  quindi la classifica è decisa dallo spareggio (numero di film).
+	- Come "example genres" si mostrano i 5 generi in cui l'attore compare più spesso: i primi 5 in
+	  ordine alfabetico sarebbero stati uguali per tutti (Action, Adventure, Animation, ...).
+
+Q4 Collezioni (≥ 3 film) con la revenue totale più alta
+	- Raggruppate per belongs_to_collection.id (nessun nome di collezione ha più di un id).
+	- La revenue totale somma solo gli incassi noti: la colonna "movies with revenue" mostra quanti
+	  sono (es. Despicable Me Collection: 6 film, 4 con incasso).
+	- Mediana di vote_average esatta (punto 1), date dalla prima all'ultima uscita.
+
+Q5 Runtime mediano per decennio e genere principale
+	- Genere principale = primo elemento di genres (l'ordine dell'array è quello del file originale).
+	- Esclusi i film senza release_date, senza runtime o senza generi.
+	- Nei decenni più vecchi (1870-1900) i film sono pochissimi e quasi tutti cortometraggi
+	  (mediana 1 minuto): i valori vanno letti insieme al numero di film.
+
+Q6 Proporzione di donne tra i primi 5 attori, per decennio
+	- I primi 5 si trovano ordinando il cast per order ($sortArray), non cercando order 0-4:
+	  order non parte sempre da 0 e ha buchi (report_pulizia).
+	- Gender null (non specificato) è ignorato: la proporzione è sulle persone con genere noto
+	  tra i primi 5; i film in cui nessuno dei 5 ha il genere noto non vengono usati.
+	- 1870s, 1890s, 1900s e 2020s hanno da 1 a 12 film: le loro proporzioni (anche 1,00 e 0,80)
+	  non sono significative. Tra i decenni con molti film la proporzione va da 0,31 (1970s) a 0,38 (2010s).
+
+Q7 Film "noir" / "neo-noir" (vote_count ≥ 50)
+	- $text sull'indice di testo di overview e tagline. Il tokenizer spezza "neo-noir" in "neo" e "noir",
+	  quindi cercare "noir" trova già entrambi. Cercare anche "neo" porterebbe falsi positivi
+	  (es. Neo di Matrix), e la frase "\"neo-noir\"" insieme a "noir" in MongoDB vale come AND, non OR.
+	- I risultati sono solo 5 (60 film contengono "noir", 5 con almeno 50 voti), e sono corretti.
+	  Verifica con una regex /noir/i: trova 82 film, ma le differenze sono falsi positivi della regex
+	  ("Renoir", "Philippe Noiret") oppure "noirish" (es. Phoenix: "A Gripping Noirish Study..."),
+	  che per lo stemmer è una parola diversa.
+
+Q8 Coppie regista-attore (≥ 3 film con vote_count ≥ 100)
+	- Escluse le coppie in cui regista e attore sono la stessa persona (un regista che recita nel
+	  proprio film non è una collaborazione).
+	- Il filtro vote_count ≥ 100 è applicato prima di formare le coppie: i 3 film devono averlo tutti.
+	- La revenue media è sui soli film con incasso noto: per molte coppie è 1 o 2 film su 3
+	  (colonna "movies with revenue"), per Kurosawa - Susumu Fujita nessuno (vuota).
+	- La classifica è dominata da Akira Kurosawa e il suo gruppo fisso di attori.
+
+Q9 Lingue originali non inglesi in film prodotti negli Stati Uniti
+	- Nel dataset production_companies ha solo id e name, senza il paese della compagnia:
+	  "United States" si può verificare solo su production_countries (iso_3166_1 = "US").
+	- Esclusi anche i film con original_language null.
+	- Titolo d'esempio = il film con più voti (vote_count) di quella lingua.
+	- Compare il codice "xx" (No Language): film senza dialoghi, è un codice TMDB, non un errore.
+	- Il nome della lingua è quello di spoken_languages, scritto nella lingua stessa (es. "Español").
+
+Q10 Utenti: numero di voti, varianza e generi distinti
+	- Metodo ibrido: MongoDB raggruppa i 26 milioni di voti per utente (numero, $stdDevPop elevata
+	  al quadrato = varianza di popolazione, lista dei film); Python traduce i film in generi con
+	  un dizionario movie_id -> generi (tip dell'assignment sui dizionari). Un $lookup su movies
+	  per ogni voto sarebbe molto più lento, soprattutto sulla VM.
+	- Utenti in totale: 270.882; con almeno 20 voti: 166.267. La soglia vale per entrambe le classifiche.
+	- 2.853 utenti hanno votato film di tutti i 20 generi: la classifica dei più "genre-diverse"
+	  è decisa dallo spareggio sul numero di voti (in testa l'utente 45811, 18.220 voti).
+	- La varianza massima possibile è 5,0625 (metà voti 0,5 e metà 5): i primi utenti della
+	  classifica la raggiungono. Sono utenti che danno solo voti estremi (vedi EDA_ratings).
+	- Verifica a mano dell'utente 18703: 20 voti, varianza 5,0625, 13 generi, uguale all'output.
