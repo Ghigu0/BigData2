@@ -40,7 +40,6 @@ SCRIPT
 
 	Eseguire le query della Part 2 (database già popolato):
 	python Query/queries.py                             tutte le 10 query (~1,5 minuti con il dataset completo)
-	python Query/queries.py 1 7                         solo le query scelte (numeri da 1 a 10)
 
 
 4. PROVARE IL DATABASE
