@@ -1,6 +1,6 @@
 """
 Cleaning rules applied by populate.py while the data is loaded. Every rule, with the reason
-behind it, is described in report_pulizia.txt.
+behind it, is described in cleaning_report.txt.
 
 Each function records in `log` (a Counter) how many rows or values it changed, so every number
 of the report can be found in the output of populate.py.

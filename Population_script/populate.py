@@ -1,7 +1,7 @@
 """
 Cleans the csv files of the dataset and inserts them in the collections movies and ratings,
-with the structure described in Structure/struttura_db.txt. The cleaning rules are in cleaning.py
-and are explained in report_pulizia.txt.
+with the structure described in Structure/db_structure.txt. The cleaning rules are in cleaning.py
+and are explained in cleaning_report.txt.
 
     python Population_script/populate.py            full dataset (links.csv, ratings.csv)
     python Population_script/populate.py --small    links_small.csv and ratings_small.csv, for a quick test

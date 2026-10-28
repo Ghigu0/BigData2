@@ -1,61 +1,61 @@
 - id
-	Identificativo del film su TMDB, lo stesso di movies_metadata.id (es. 862 = Toy Story)
+	Identifier of the movie on TMDB, the same as movies_metadata.id (e.g. 862 = Toy Story)
 
 - keywords
-	Lista delle parole chiave del film (oggetti con id e nome): temi della trama,
-	ma anche informazioni sulla produzione (es. "woman director", "based on novel")
+	List of the movie's keywords (objects with id and name): plot themes,
+	but also information about the production (e.g. "woman director", "based on novel")
 
     [{'id': 931, 'name': 'jealousy'}, {'id': 4290, 'name': 'toy'}, {'id': 9713, 'name': 'friends'}, ...]
 
-    id è il codice TMDB della keyword, name è il testo.
-    Come per genres è scritto come lista Python (apici singoli): si legge con ast.literal_eval, non con json.loads.
+    id is the TMDB code of the keyword, name is the text.
+    As for genres, it is written as a Python list (single quotes): it is read with ast.literal_eval, not with json.loads.
 
 
-CONSIDERAZIONI DAGLI SCRIPT EDA
+FINDINGS FROM THE EDA SCRIPTS
 
 
-- Struttura:
-	46.419 righe, 2 colonne (id, keywords). Tutte le righe hanno esattamente 2 campi,
-	nessuna riga spezzata come in movies_metadata.
-	Tutti gli id sono numerici, nessun campo keywords vuoto.
+- Structure:
+	46,419 rows, 2 columns (id, keywords). All rows have exactly 2 fields,
+	no broken rows as in movies_metadata.
+	All ids are numeric, no empty keywords field.
 
-- Campo keywords:
-	si legge sempre con ast.literal_eval ed è sempre una lista.
-	158.680 oggetti in totale, tutti con le sole chiavi id (intero) e name (stringa).
+- keywords field:
+	it can always be read with ast.literal_eval and it is always a list.
+	158,680 objects in total, all with only the keys id (integer) and name (string).
 
-- ID duplicati:
-	985 id compaiono più di una volta, per un totale di 1.972 righe.
-	983 id compaiono 2 volte, 2 id compaiono 3 volte (141971 Blackout e 159849, entrambi con lista vuota).
-	Le copie sono SEMPRE identiche: tenendo una copia per id si eliminano 987 righe.
-	29 di questi id sono gli stessi duplicati di movies_metadata, gli altri 956 sono duplicati solo qui.
+- Duplicated IDs:
+	985 ids appear more than once, for a total of 1,972 rows.
+	983 ids appear 2 times, 2 ids appear 3 times (141971 Blackout and 159849, both with an empty list).
+	The copies are ALWAYS identical: keeping one copy per id removes 987 rows.
+	29 of these ids are the same duplicates as in movies_metadata, the other 956 are duplicated only here.
 
-- Film senza keywords:
-	14.795 righe su 46.419 hanno la lista vuota []; contando ogni film una volta sono
-	14.340 film su 45.432, cioè il 31,6%.
+- Movies without keywords:
+	14,795 rows out of 46,419 have the empty list []; counting each movie once they are
+	14,340 movies out of 45,432, i.e. 31.6%.
 
-	Non è un dato mancante "a caso": dipende da quanto è conosciuto il film.
+	It is not data missing "at random": it depends on how well known the movie is.
 
-	voti del film    senza keywords
-	0                57,0%
-	1-9              43,0%
-	10-99            23,7%
-	100-999           5,3%
-	1000+             0,5%
+	movie votes      without keywords
+	0                57.0%
+	1-9              43.0%
+	10-99            23.7%
+	100-999           5.3%
+	1000+             0.5%
 
-	Quindi i film poco votati sono quasi sempre senza keywords, quelli famosi quasi mai.
+	So movies with few votes almost always have no keywords, famous ones almost never.
 
-- Coerenza tra id e name delle keyword:
-	19.956 keyword distinte. Ogni id ha sempre un solo nome e ogni nome ha sempre un solo id.
+- Consistency between keyword id and name:
+	19,956 distinct keywords. Each id always has a single name and each name always has a single id.
 
 
 
-- Keyword con nome vuoto:
-	la keyword con id 13091 ha come nome solo '\xa0' (uno spazio): è usata in 4 film e non significa nulla.
+- Keyword with an empty name:
+	the keyword with id 13091 has only '\xa0' (a space) as its name: it is used in 4 movies and means nothing.
 
-- Stessa parola con id diversi:
-	togliendo gli spazi, 6 parole compaiono con due id diversi: la versione "pulita" e quella con lo spazio.
+- Same word with different ids:
+	removing the spaces, 6 words appear with two different ids: the "clean" version and the one with the space.
 
-	parola           id       nome                     film
+	word             id       name                     movies
 	infatuation      34262    'infatuation \xa0'       3
 	infatuation      164500   'infatuation'            5
 	telephone call   10904    'telephone call'         4
@@ -69,45 +69,45 @@ CONSIDERAZIONI DAGLI SCRIPT EDA
 	hipster          155081   '\xa0hipster \xa0'       1
 	hipster          175297   'hipster'                2
 
-	Per TMDB sono keyword diverse, ma per chi legge sono la stessa parola: una query che conta
-	i film con "bellhop" ne troverebbe 1 invece di 5.
+	For TMDB they are different keywords, but for a reader they are the same word: a query counting
+	the movies with "bellhop" would find 1 instead of 5.
 
-- Keyword ripetute nello stesso film: nessuna.
-
-
-COSE DA FARE
-	- eliminare i duplicati (le copie sono identiche, basta tenerne una)
-		Quindi:
-		- Le ricerche esatte falliscono. In MongoDB, {"keywords.name": "bellhop"} trova 1 film invece di 5, perché gli altri 4 hanno 'bellhop\xa0'.
-		- I conteggi si dividono. Raggruppando per keyword, "bellhop" compare due volte con numeri diversi.
-		- È un errore invisibile: guardando i risultati non vedi la differenza, quindi è difficile capire perché una query non torna.
-	- togliere gli spazi (normali e \xa0) all'inizio e alla fine dei nomi
-	- unire le 6 coppie di keyword che dopo la pulizia hanno lo stesso nome (es. tenere l'id della versione senza spazi)
-	- eliminare la keyword 13091 con nome vuoto
+- Keywords repeated in the same movie: none.
 
 
-Controlli logici / collegamento con movies_metadata
+TO DO
+	- remove the duplicates (the copies are identical, keeping one is enough)
+		Consequences of the spaces:
+		- Exact searches fail. In MongoDB, {"keywords.name": "bellhop"} finds 1 movie instead of 5, because the other 4 have 'bellhop\xa0'.
+		- Counts get split. Grouping by keyword, "bellhop" appears twice with different numbers.
+		- It is an invisible error: looking at the results you cannot see the difference, so it is hard to understand why a query does not add up.
+	- remove the spaces (normal and \xa0) at the start and at the end of the names
+	- merge the 6 pairs of keywords that after cleaning have the same name (e.g. keep the id of the version without spaces)
+	- remove keyword 13091 with an empty name
 
-- tutti i film presenti in keywords ci sono nel dataset originale 
 
-- Film validi di movies_metadata senza riga in keywords.csv: 1
-	School's out (401840), uscito il 2017-05-30, 0 voti.
+Logical checks / link with movies_metadata
+
+- all the movies present in keywords are in the original dataset
+
+- Valid movies of movies_metadata without a row in keywords.csv: 1
+	School's out (401840), released on 2017-05-30, 0 votes.
 
 
-Quello che emerge
-- Il 31,6% dei film non ha keywords, quasi tutti film con pochi voti: le query sulle keyword
-  riguardano in pratica i film più conosciuti.
-  
-- Keyword per film: media 3,4, mediana 2, massimo 149 (Werckmeister Harmonies).
+What emerges
+- 31.6% of the movies have no keywords, almost all of them movies with few votes: queries on keywords
+  in practice concern the best known movies.
 
-	keyword    film
-	0          31,6%
-	1          14,2%
-	2-5        33,0%
-	6-10       13,4%
-	11-20       6,9%
-	21+         1,0%
+- Keywords per movie: average 3.4, median 2, maximum 149 (Werckmeister Harmonies).
 
-- Il 43,6% delle keyword (8.691 su 19.956) è usato da un solo film.
-- Keyword più usate: woman director (3.039 film, 6,7%), independent film (1.914, 4,2%),
-  murder (1.285, 2,8%), based on novel (822, 1,8%), musical (726, 1,6%).
+	keywords   movies
+	0          31.6%
+	1          14.2%
+	2-5        33.0%
+	6-10       13.4%
+	11-20       6.9%
+	21+         1.0%
+
+- 43.6% of the keywords (8,691 out of 19,956) are used by a single movie.
+- Most used keywords: woman director (3,039 movies, 6.7%), independent film (1,914, 4.2%),
+  murder (1,285, 2.8%), based on novel (822, 1.8%), musical (726, 1.6%).

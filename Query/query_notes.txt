@@ -1,0 +1,398 @@
+NOTES ON THE PART 2 QUERIES 
+
+Files
+	queries.py      the 10 queries, one method per query (query_1 ... query_10)
+
+	python Query/queries.py          runs all 10 queries (~1.5 minutes with the full dataset, on the local docker)
+
+	Times on the local docker: Q2 ~50 s (6.5 million actor pairs), Q10 ~23 s, all the others under 3 s.
+
+
+HOW THE QUERIES ARE BUILT
+
+1 Aggregation pipeline
+	In MongoDB a query is not a text string as in SQL ("SELECT ... FROM ..."), but a data
+	structure: with pymongo it is written as Python lists and dictionaries, which are sent to the server and
+	executed there. There are two main ways:
+	- find(filter, projection): selects the documents and the fields to return, like a SELECT ... WHERE
+	  without grouping. It is the one used in example.py.
+	- aggregate(pipeline): the pipeline is a list of stages ($match, $project, $unwind, $group, $sort,
+	  $limit, ...). Each stage receives the documents from the previous stage, transforms them and passes them
+	  to the next one, like an assembly line.
+
+	All 10 questions ask for groupings, counts, averages, medians or rankings on computed
+	values, which find() cannot do: this is why every query is an aggregation pipeline
+	(the assignment Tips point exactly to "Aggregation and the pipeline stages").
+	Correspondence with SQL:
+		$match before $group        WHERE
+		$project / $addFields       SELECT (choosing fields or computing new ones)
+		$unwind                     the JOIN with a child table: one document per element of an array
+		$group                      GROUP BY with the aggregation functions ($sum, $avg, $push, ...)
+		$match after $group         HAVING
+		$sort, $limit               ORDER BY, LIMIT
+
+	Thanks to embedding (cast, crew, genres and keywords inside the movie, see Structure/db_structure.txt)
+	queries 1-9 work only on the movies collection, without $lookup (the equivalent of a JOIN between
+	collections, the most expensive operation). Query 10 uses ratings and takes the genres from movies with a
+	Python dictionary (see Q10).
+
+	The pipeline pieces used in several queries are built by Python functions at the top of queries.py:
+	they do not execute anything, they only return an expression to put inside the pipeline
+	(median() for the exact median, decade() for the decade, people() with DIRECTORS and ACTORS for
+	the distinct directors and actors of a movie).
+
+2 Output: pprint and tabulate
+	Each query prints its result in two forms:
+	- "Raw output (pprint)": the documents exactly as MongoDB returns them, printed with pprint
+	  as the assignment requires ("Use pprint to pretty-print the data output from MongoDB"). It shows the
+	  field names and the unrounded values, and it is the proof that the result comes from the query.
+	- "Table (tabulate)": the same data in a table, one row per result, with selected columns,
+	  thousands separator and 2 decimals. It is more readable for rankings and for the screenshots
+	  in the report (tabulate is in the assignment requirements).
+	Where the query finds many results (Q2: 45,650 pairs, Q3: 10,405 actors) both forms print
+	only the ones shown in the ranking.
+	Q10 is the only exception: the MongoDB documents contain the list of all the movies rated by
+	each user (up to 18,276), so the pprint shows the final values, after Python has counted
+	the genres.
+
+
+
+GENERAL CHOICES
+
+1 Exact median
+	MongoDB 7.0 has $median, but only with method "approximate": with an even number of values
+	it returns the lower central value instead of the average of the two central ones
+	(the median of [1, 2, 3, 4] comes out as 2, not 2.5; the one of [100, 250, 7000, 8000, 31000, 90000]
+	comes out as 7000 instead of 7500).
+	This is why the median is computed with an aggregation expression (median() function in queries.py):
+	the values are sorted with $sortArray and the two central ones are averaged. It is used in queries 1, 4 and 5.
+	Null values are ignored.
+
+2 Missing values
+	Missing budget, revenue, runtime and vote_average are null (see Population_script/cleaning_report.txt).
+	MongoDB's $avg, $sum, $min and $max ignore nulls: averages and totals are computed only on the
+	known values. Where it matters (revenue) the tables also report how many movies the value is computed on
+	(column "movies with revenue").
+
+3 People counted once per movie
+	An actor with several characters in the same movie appears several times in the cast (1,152 cases, see
+	cleaning_report). To count the movies of a person, the distinct people of each movie are taken
+	($setUnion on {id, name}): people() function in queries.py. The same applies to directors
+	(a movie can have several directors, each counted once).
+
+4 Sorting on ties
+	In the queries where ties are frequent (Q1, Q2, Q3, Q5, Q8, Q9) the sorting has a fixed
+	tie-breaking criterion (a second value and finally the _id), so the results are identical on every
+	run. In Q3 and Q10 the tie-break decides the ranking (see below).
+
+
+QUERY BY QUERY
+
+For each query: the task, how the pipeline works stage by stage, the choices made and the result.
+
+
+Q1 Directors with the highest median revenue
+
+	Task
+	"Considering only crew with job = Director, which 10 directors with ≥ 5 movies have the highest
+	median revenue? Also report each director's movie count and mean vote_average."
+
+	How it works
+	1. $project    for each movie keeps revenue, vote_average and the list of directors (DIRECTORS: the crew
+	               members with job = "Director", as distinct {id, name})
+	2. $unwind     one document per (movie, director) pair: a movie with 2 directors becomes 2 documents
+	3. $group      by director id: name, number of movies, number of movies with known revenue
+	               ($cond: 1 if revenue is not null), list of revenues ($push), average vote_average
+	4. $match      only directors with at least 5 movies with known revenue (like HAVING)
+	5. $project    exact median of the revenues (median())
+	6. $sort       by median descending, on a tie by id
+	7. $limit      the top 10
+
+	Reasoning and choices
+	- The "≥ 5 movies" threshold applies to movies with known revenue, not to all the directed movies:
+	  revenue is known in only 16% of the movies, and with the threshold on all movies the median could
+	  be based on 1 or 2 revenues. The table reports both counts ("movies" and "movies with revenue").
+	- The average vote_average is computed on all the directed movies, not only on those with revenue.
+	- The director is identified by id and not by name (namesakes, names in two alphabets: see EDA_credits).
+
+	Result
+	At the top David Yates (10 movies, 6 with revenue, median 936 million), Peter Jackson and George Lucas.
+	Eric Darnell and Tom McGrath have the same median: they co-directed the same movies (Madagascar).
+
+
+Q2 Actor pairs with at least 3 movies together
+
+	Task
+	"List actor pairs have co-starred in ≥ 3 movies together, their number of co-appearances, and their
+	average movie vote_average. Sort by number of co-appearances."
+
+	How it works
+	1. $project    for each movie vote_average and two copies of the list of distinct actors (a and b = ACTORS)
+	2. $unwind a   one document per actor of the movie
+	3. $unwind b   for each of them, one document per actor of the movie: all the actor x actor combinations
+	               (like a JOIN of the cast with itself)
+	4. $match      only the combinations with id_a < id_b ($expr, because it compares two fields of the same
+	               document): removes an actor paired with themselves and keeps each pair only once
+	               ((Laurel, Hardy) and (Hardy, Laurel) are the same pair)
+	5. $group      by pair of ids: the two names, number of movies together, average vote_average
+	6. $match      only the pairs with at least 3 movies
+	7. $sort       by number of movies descending, then by average vote_average, then by id
+
+	Reasoning and choices
+	- Thanks to embedding the cast is inside the movie: the pairs are built without any $lookup.
+	- The actors of each movie are taken as distinct (ACTORS): an actor with two characters in the same
+	  movie does not count that movie twice.
+	- It is the heaviest query: the double $unwind creates about 6.5 million intermediate pairs, more than the
+	  100 MB of memory that MongoDB grants to a stage. This is why allowDiskUse=True is used, which
+	  lets MongoDB use temporary files on disk.
+	- The task does not say how many pairs to show: the pairs with at least 3 movies are 45,650, the script
+	  prints the total and the top 20.
+	- Within a pair the order of the names follows the id (the smaller one first), not alphabetical order.
+
+	Result
+	At the top Huntz Hall - Leo Gorcey (35 movies, the Bowery Boys series), Charlie Chaplin - Edna Purviance
+	(33) and Oliver Hardy - Stan Laurel (31): fixed duos of classic cinema and animation voice actors.
+
+
+Q3 Actors (with at least 10 movies) with the most distinct genres
+
+	Task
+	"List the top 10 actors (with ≥ 10 credited movies) that have the widest genre breadth. Report the
+	actor, the number of distinct genres they've appeared in, and up to 5 example genres."
+
+	How it works
+	Phase 1, the movies of each actor:
+	1. $project    for each movie the list of genre names and the list of distinct actors
+	2. $unwind     one document per actor of the movie
+	3. $group      by actor: number of movies and list of the genres of each movie ($push: a list of lists)
+	4. $match      only actors with at least 10 movies
+	Phase 2, how many times the actor appears in each genre:
+	5. $unwind x2  two $unwinds because genres is a list of lists: in the end one document per
+	               (actor, genre of one of their movies) pair
+	6. $group      by (actor, genre): in how many of the actor's movies that genre appears
+	Phase 3, distinct genres and examples:
+	7. $group      by actor: number of distinct genres (one document per genre, hence $sum: 1)
+	               and the 5 most frequent genres with $topN
+	8. $sort       by number of genres descending, then by number of movies, then by id
+
+	Reasoning and choices
+	- There are 10,405 actors with at least 10 movies, and 22 of them have played in all 20 genres:
+	  the top 10 all have 20 genres, so the ranking is decided by the tie-break, the number of movies.
+	  The script prints how many actors are tied, so as not to make the first one look like "the most versatile".
+	- "Up to 5 example genres": the 5 genres in which the actor appears most often are shown. The first 5 in
+	  alphabetical order would have been the same for everyone (Action, Adventure, Animation, Comedy, Crime).
+
+	Result
+	Christopher Lee (148 movies), Donald Sutherland (108), Christopher Walken (96), ... all with 20 genres.
+
+
+Q4 Collections (with at least 3 movies) with the highest total revenue
+
+	Task
+	"For film collections (belongs_to_collection.name not null) with ≥ 3 movies, which 10 collections have
+	the largest total revenue? For each, report movie count, total revenue, median vote_average, and the
+	earliest → latest release date."
+
+	How it works
+	1. $match      only the movies that belong to a collection (belongs_to_collection.name not null)
+	2. $group      by collection id: name, number of movies, number of movies with known revenue,
+	               total revenue ($sum), list of vote_averages, first ($min) and last ($max) release date
+	3. $match      only the collections with at least 3 movies
+	4. $sort       by total revenue descending
+	5. $limit      the top 10
+	6. $project    exact median of vote_average, computed only for the 10 remaining collections
+	               (it is not needed for sorting)
+	The dates are printed without the time (day() function) in the form "first -> last".
+
+	Reasoning and choices
+	- No $unwind is needed: the collection is a simple field of the movie.
+	- Grouped by id and not by name (no collection name has more than one id, verified).
+	- The total revenue sums only the known revenues ($sum ignores nulls): the "movies with revenue" column
+	  shows how many movies it is computed on (e.g. Despicable Me Collection: 6 movies, 4 with revenue, so the
+	  total is underestimated).
+	- "movies" counts the movies of the saga present in the dataset, which stops in 2017.
+
+	Result
+	Harry Potter (7.7 billion, 8 movies), Star Wars (7.4) and James Bond (7.1, but with 26 movies).
+
+
+Q5 Median runtime by decade and primary genre
+
+	Task
+	"By decade (e.g., 1970s, 1980s, …) and primary genre (first element in genres), what is the median
+	runtime and movie count? List results sorted by decade then median runtime (desc)."
+
+	How it works
+	1. $match      only movies with release_date, runtime and at least one genre ("genres.0" exists)
+	2. $group      by (decade, first genre): the decade with decade(), the first genre with
+	               $arrayElemAt at position 0; list of runtimes and number of movies
+	3. $project    exact median of the runtimes
+	4. $sort       by decade ascending, then by median descending (as the task requires), then by genre
+
+	Reasoning and choices
+	- Primary genre = first element of genres: the cleaning kept the order of the array of the original
+	  file, otherwise "the first genre" would not be the right one.
+	- Movies without release_date, runtime or genres are excluded: they cannot be put in any group.
+	- The task sets no limit: all the groups are printed (about 230).
+
+	Result
+	In recent decades the median is mostly around 90-100 minutes: War and Drama are among the
+	longest genres, Animation and Documentary among the shortest (e.g. 1980s: War 120, Documentary 84).
+	In the oldest decades (1870-1900) there are very few movies and almost all are short films (median of
+	1-2 minutes), and even in recent decades some groups have few movies (e.g. 1980s Foreign: 7):
+	the values must be read together with the number of movies.
+
+
+Q6 Proportion of women among the top 5 actors, by decade
+
+	Task
+	"For each movie's top-billed 5 cast (by order), what is the proportion of female cast? Aggregate by
+	decade and list decades sorted by average female proportion (desc), including movie counts used.
+	Unknown gender may be ignored."
+
+	How it works
+	1. $match      only movies with release_date and at least one actor
+	2. $project    the top 5 actors: the cast sorted by order ($sortArray) and cut to the first 5 ($slice)
+	3. $project    among the 5, how many have a known gender (gender not null) and how many are women (gender = 1)
+	4. $match      only movies in which at least one of the 5 has a known gender
+	5. $group      by decade: average of the movies' women / known gender proportions, number of movies
+	6. $sort       by average proportion descending
+
+	Reasoning and choices
+	- The top 5 are found by sorting the cast by order, not by looking for order 0 to 4: order does not
+	  always start from 0 and has gaps (EDA_credits).
+	- Null gender (not specified) is ignored, as the task allows: the proportion is over the
+	  people with a known gender among the top 5. Example: 2 women, 2 men and 1 unknown give 2/4 = 0.5.
+	  Movies in which none of the 5 has a known gender are not used (a proportion cannot be computed).
+	- The proportion is computed for each movie and then averaged over the decade ("average female proportion"),
+	  so every movie has the same weight.
+
+	Result
+	1870s, 1890s, 1900s and 2020s have from 1 to 12 movies: their proportions (even 1.00 and 0.80) are not
+	significant. Among the decades with many movies the proportion ranges from 0.31 (1970s) to 0.38 (2010s).
+
+
+Q7 "noir" / "neo-noir" movies (vote_count ≥ 50) with the highest vote_average
+
+	Task
+	"Using a text search over overview and tagline, which 20 movies matching "noir" or "neo-noir" (and
+	vote_count ≥ 50) have the highest vote_average? Return title, year, vote_average, and vote_count."
+
+	How it works
+	1. $match      $text with the search "noir" (uses the text index on overview and tagline created with the
+	               structure) and vote_count >= 50
+	2. $sort       by vote_average descending, on a tie by vote_count
+	3. $limit      the top 20
+	4. $project    title, year ($year of the date), vote_average, vote_count
+	Before the table the script prints how many movies contain "noir" and how many have at least 50 votes.
+
+	Reasoning and choices
+	- $text only works with a text index, and MongoDB allows one per collection: this is why
+	  the structure has a single index on overview and tagline together.
+	- The tokenizer splits "neo-noir" into "neo" and "noir", so searching for "noir" already finds both.
+	  Also searching for "neo" would bring false positives (e.g. Neo from The Matrix), and the phrase "\"neo-noir\""
+	  together with "noir" counts as AND in MongoDB, not OR.
+	- The cleaning of placeholder overviews matters here: without it, a text search would find the
+	  standard TMDB sentences (cleaning_report.txt, movies_metadata point 6).
+
+	Result
+	Only 5 movies: 60 movies contain "noir", 5 with at least 50 votes (The Bad Sleep Well, Drunken Angel,
+	Elevator to the Gallows, Synchronicity, Frank & Lola). The result is correct: a check with the
+	regex /noir/i finds 82 movies, but the differences are regex false positives ("Renoir",
+	"Philippe Noiret") or "noirish" (e.g. Phoenix: "A Gripping Noirish Study..."), which for the
+	stemmer is a different word.
+
+
+Q8 Director-actor pairs (at least 3 movies with vote_count ≥ 100) with the highest mean vote_average
+
+	Task
+	"Which 20 director–actor pairs with ≥ 3 collaborations (same movie) have the highest mean vote_average,
+	considering only movies with vote_count ≥ 100? Include the pair's films count and mean revenue."
+
+	How it works
+	1. $match      only movies with vote_count >= 100
+	2. $project    for each movie vote_average, revenue, list of directors (DIRECTORS) and of actors (ACTORS)
+	3. $unwind x2  one document per (director, actor) combination of the same movie
+	4. $match      excluded the combinations where director and actor are the same person
+	5. $group      by pair: names, number of movies, average vote_average, number of movies with known
+	               revenue, average revenue ($avg ignores nulls)
+	6. $match      only the pairs with at least 3 movies
+	7. $sort       by average vote_average descending, then by number of movies, then by id
+	8. $limit      the top 20
+
+	Reasoning and choices
+	- The vote_count >= 100 filter is applied before building the pairs: all 3 movies must satisfy it.
+	- A director acting in their own movie is not a collaboration: in 3,754 movies the director is
+	  also in the cast, and these pairs are excluded.
+	- The average revenue is over the movies with known revenue only: for many pairs it is 1 or 2 movies out of 3
+	  (column "movies with revenue"), for Kurosawa - Susumu Fujita none (empty).
+
+	Result
+	The ranking is dominated by Akira Kurosawa and his regular group of actors (average vote_average
+	around 8.1); followed by Francis Ford Coppola - Robert Duvall and Peter Jackson with the actors of
+	The Lord of the Rings.
+
+
+Q9 Non-English original languages in movies produced in the United States
+
+	Task
+	"Among movies where original_language ≠ "en" but at least one production company or country is United
+	States, which are the top 10 original languages by count? For each language, report the count and one
+	example title."
+
+	How it works
+	1. $match      original_language different from "en" and not null, and "US" among the production countries
+	2. $sort       by vote_count descending: this way the first movie of each language is the best known
+	3. $group      by original_language: number of movies, example title ($first, the movie with the most votes)
+	               and language name taken from spoken_languages
+	4. $sort       by number of movies descending, then by code
+	5. $limit      the top 10
+
+	Reasoning and choices
+	- In the dataset production_companies only has id and name, without the country of the company: "United States"
+	  can only be checked on production_countries (iso_3166_1 = "US").
+	- Movies with a null original_language are excluded too.
+	- Example title = the movie with the most votes (vote_count) for that language: the task asks for "one
+	  example title", and the best known one is the most meaningful.
+	- The language name is found because the cleaning added original_language to spoken_languages
+	  when it was missing. It is the name from the file, written in the language itself (e.g. "Español").
+	- The code "xx" (No Language) appears: movies without dialogue, it is a TMDB code, not an error.
+	- TMDB uses "zh" for Mandarin and "cn" for Cantonese (which is not an ISO 639-1 code): they are
+	  counted as two different languages.
+
+	Result
+	French (112 movies, e.g. Leon: The Professional), Spanish (72), Italian (56), German (51), Japanese (31).
+
+
+Q10 Users: number of ratings, variance and distinct genres
+
+	Task
+	"For each user, what is their ratings count, population variance of ratings, and number of distinct
+	genres rated? List the top 10 most genre-diverse users, and separately the top 10 highest-variance
+	users (only users with ≥ 20 ratings)."
+
+	How it works
+	It is the only query on ratings and it is hybrid, MongoDB + Python:
+	1. MongoDB, pipeline on ratings with a single $group by user_id: number of ratings, population
+	   standard deviation ($stdDevPop) and list of the rated movies
+	2. Python, movie_id -> genres dictionary read from movies with a find()
+	3. Python, for each user with at least 20 ratings: variance = standard deviation squared, distinct
+	   genres = union of the genres of their movies (set)
+	4. Python, two sortings: by distinct genres and by variance, on a tie by number of ratings; the top 10
+
+	Reasoning and choices
+	- The genres are in movies, the ratings in ratings. Joining them in MongoDB would mean a $lookup on movies for
+	  each of the 26 million ratings, very slow, especially on the VM. A Python dictionary with 45,433
+	  movies is built in no time and the lookup is immediate (assignment tip on dictionaries).
+	- MongoDB has no operator for the variance: $stdDevPop is used (population, as the task requires)
+	  and it is squared.
+	- The 20-ratings threshold applies to both rankings.
+	- allowDiskUse=True: the $group on 26 million ratings exceeds the 100 MB of memory of a stage.
+
+	Result
+	Total users: 270,882; with at least 20 ratings: 166,267.
+	- 2,853 users have rated movies of all 20 genres: the ranking of the most "genre-diverse" is
+	  decided by the tie-break on the number of ratings (at the top user 45811, 18,220 ratings).
+	- The maximum possible variance is 5.0625 (half the ratings 0.5 and half 5): the top 6 users of the ranking
+	  reach it. They are users who give only extreme ratings (see EDA_ratings).
+	- Manual check of user 18703: 20 ratings, variance 5.0625, 13 genres, same as the output.

@@ -1,149 +1,149 @@
-STRUTTURA DEL FILE credits.csv
+STRUCTURE OF THE credits.csv FILE
 
-Tre colonne: cast, crew, id. 
-Una riga per film.
+Three columns: cast, crew, id.
+One row per movie.
 
 - id
-	Identificativo del film su TMDB, lo stesso di movies_metadata.id (es. 862 = Toy Story)
+	Identifier of the movie on TMDB, the same as movies_metadata.id (e.g. 862 = Toy Story)
 
 - cast
-	Lista degli attori del film. Ogni attore è un oggetto con 8 campi:
+	List of the movie's actors. Each actor is an object with 8 fields:
 
     {'cast_id': 14, 'character': 'Woody (voice)', 'credit_id': '52fe4284c3a36847f8024f95', 'gender': 2,
      'id': 31, 'name': 'Tom Hanks', 'order': 0, 'profile_path': '/pQFoyx7rp09CJTAb932F2g8Nlho.jpg'}
 
-	cast_id       numero dell'attore all'interno del film
-	character     personaggio interpretato
-	credit_id     codice univoco di questa "partecipazione" (persona + film + ruolo)
-	gender        genere della persona: 0 = non specificato, 1 = donna, 2 = uomo (codifica di TMDB)
-	id            identificativo della PERSONA su TMDB (non del film!)
-	name          nome della persona
-	order         posizione nei titoli di coda: 0 = primo attore, 1 = secondo, ...
-	profile_path  foto della persona sul sito di TMDB (None se manca)
+	cast_id       number of the actor within the movie
+	character     character played
+	credit_id     unique code of this "participation" (person + movie + role)
+	gender        gender of the person: 0 = not specified, 1 = female, 2 = male (TMDB encoding)
+	id            identifier of the PERSON on TMDB (not of the movie!)
+	name          name of the person
+	order         position in the credits: 0 = first actor, 1 = second, ...
+	profile_path  photo of the person on the TMDB website (None if missing)
 
 - crew
-	Lista delle persone che hanno lavorato al film dietro la camera. Ogni persona è un oggetto con 7 campi:
+	List of the people who worked on the movie behind the camera. Each person is an object with 7 fields:
 
     {'credit_id': '52fe4284c3a36847f8024f49', 'department': 'Directing', 'gender': 2, 'id': 7879,
      'job': 'Director', 'name': 'John Lasseter', 'profile_path': '/7EdqiNbr4FRjIhKHyPPdFfEEEFG.jpg'}
 
-	department    reparto (Directing, Writing, Production, Sound, ...)
-	job           ruolo preciso (Director, Screenplay, Producer, ...)
-	credit_id, gender, id, name, profile_path   come nel cast
+	department    department (Directing, Writing, Production, Sound, ...)
+	job           specific role (Director, Screenplay, Producer, ...)
+	credit_id, gender, id, name, profile_path   as in the cast
 
-    Come negli altri file, le liste sono scritte in formato Python (apici singoli): si leggono con ast.literal_eval.
-    Attenzione: dentro cast e crew "id" è la persona, mentre la colonna id della riga è il film
-
-
-CONSIDERAZIONI DAGLI SCRIPT EDA
+    As in the other files, the lists are written in Python format (single quotes): they are read with ast.literal_eval.
+    Warning: inside cast and crew "id" is the person, while the id column of the row is the movie
 
 
-- Struttura (sezione 1):
-	45.476 righe, tutte con esattamente 3 campi: nessuna riga spezzata.
-	Tutti gli id sono numerici, cast e crew si leggono sempre e sono sempre liste.
-	Tutti gli oggetti del cast hanno gli stessi 8 campi, tutti quelli della crew gli stessi 7,
-	sempre con lo stesso tipo. L'unico campo che può mancare è profile_path (None).
-
-- ID duplicati (sezione 2):
-	43 id compaiono più di una volta, per un totale di 87 righe (42 id due volte, 1 id tre volte).
-	Tenendo una copia per id si eliminano 44 righe.
-
-	36 id hanno copie identiche.
-
-	Gli altri 7 sembrano diversi, ma lo script mostra che hanno gli stessi credit_id e nessun campo
-	con valore diverso: cambia solo l'ORDINE delle persone nella lista crew.
-	Quindi in pratica sono tutte copie dello stesso dato: basta tenerne una.
-	
-	29 di questi id sono gli stessi duplicati di movies_metadata, 14 sono duplicati solo qui.
-
-- Film senza cast o senza crew (sezione 3):
-	cast vuoto 2.414 film (5,3%), crew vuota 771 (1,7%), entrambi vuoti 421 (0,9%).
-	Come per le keyword, dipende da quanto è conosciuto il film:
-
-	voti      cast vuoto    crew vuota
-	0         21,3%         9,6%
-	1-9        7,9%         2,3%
-	10-99      1,4%         0,3%
-	100-999    0,2%         0,0%
-	1000+      0,0%         0,0%
-
-- Dati mancanti dentro le liste (sezioni 4 e 5):
-	character vuoto in 25.767 righe del cast (4,6%).
-	gender non specificato (0): 39,8% del cast e 58,6% della crew.
-	-> qualsiasi query sul genere lavora solo su una parte delle persone.
-	profile_path mancante: 30,9% del cast, 79,5% della crew (non rilevante per le query).
-
-- Spazi nei nomi (sezione 6):
-	498 nomi hanno spazi all'inizio o alla fine (99 con un tab, 1 con \xa0), es. 'Stuart Reynolds '.
-	72 di questi, una volta tolti gli spazi, coincidono con il nome di un'altra persona (id diverso).
-	Dai dati non si può dire se sono la stessa persona registrata due volte o due omonimi.
+FINDINGS FROM THE EDA SCRIPTS
 
 
-COSE DA FARE
-	- eliminare i film duplicati (tenere una copia per id)
-	- togliere gli spazi (normali, tab, \xa0) all'inizio e alla fine dei nomi
-	- trattare gender = 0 come "non specificato", non come un terzo genere
+- Structure (section 1):
+	45,476 rows, all with exactly 3 fields: no broken rows.
+	All ids are numeric, cast and crew can always be read and are always lists.
+	All the cast objects have the same 8 fields, all the crew objects the same 7,
+	always with the same type. The only field that can be missing is profile_path (None).
+
+- Duplicated IDs (section 2):
+	43 ids appear more than once, for a total of 87 rows (42 ids twice, 1 id three times).
+	Keeping one copy per id removes 44 rows.
+
+	36 ids have identical copies.
+
+	The other 7 look different, but the script shows that they have the same credit_ids and no field
+	with a different value: only the ORDER of the people in the crew list changes.
+	So in practice they are all copies of the same data: keeping one is enough.
+
+	29 of these ids are the same duplicates as in movies_metadata, 14 are duplicated only here.
+
+- Movies without cast or without crew (section 3):
+	empty cast 2,414 movies (5.3%), empty crew 771 (1.7%), both empty 421 (0.9%).
+	As for keywords, it depends on how well known the movie is:
+
+	votes     empty cast    empty crew
+	0         21.3%         9.6%
+	1-9        7.9%         2.3%
+	10-99      1.4%         0.3%
+	100-999    0.2%         0.0%
+	1000+      0.0%         0.0%
+
+- Missing data inside the lists (sections 4 and 5):
+	empty character in 25,767 cast rows (4.6%).
+	gender not specified (0): 39.8% of the cast and 58.6% of the crew.
+	-> any query on gender works only on part of the people.
+	missing profile_path: 30.9% of the cast, 79.5% of the crew (not relevant for the queries).
+
+- Spaces in names (section 6):
+	498 names have spaces at the start or at the end (99 with a tab, 1 with \xa0), e.g. 'Stuart Reynolds '.
+	72 of these, once the spaces are removed, match the name of another person (different id).
+	From the data it is impossible to tell whether they are the same person registered twice or two namesakes.
 
 
-Controlli logici
-
-- Stessa persona più volte nello stesso film (sezione 4):
-	succede in 951 film, per 1.156 persone.
-	1.152 interpretano personaggi DIVERSI: è normale (un attore con più ruoli), ma attenzione:
-	se si contano i film di un attore contando le righe del cast, questi film vengono contati due volte.
-	-> contare le coppie (film, attore) distinte.
-	4 persone compaiono due volte con lo stesso personaggio, e lo script mostra che il personaggio è vuoto:
-	sono veri doppioni.
-
-- cast_id ripetuto nello stesso film: 12 film.
-
-- Campo order (sezione 4):
-	ci aspettiamo 0, 1, 2, ... senza ripetizioni, ma:
-	- in 87 film due attori hanno lo stesso order (es. film 25: Jake Gyllenhaal e Scott MacDonald entrambi 1)
-	- in 6.314 film il primo valore NON è 0 (in 6.033 film parte da 1)
-	- in 5.948 film mancano dei numeri (es. 0, 1, 3)
-	-> per trovare il "primo attore" di un film non si può cercare order = 0: in 6.314 film non esiste.
-	   Bisogna prendere l'attore con l'order più basso.
-
-- Reparti e ruoli della crew (sezione 5):
-	12 reparti; 456 ruoli (job) diversi.
-	8 ruoli compaiono in più di un reparto (es. 'Art Direction' in Art e in Crew; 'Other' in 10 reparti).
-	Il reparto 'Actors' contiene 19 persone (Actor 9, Stunt Double 8, Voice 2): attori finiti nella crew.
-	Il ruolo 'Director' è sempre nel reparto Directing: per cercare i registi basta job = 'Director'.
-	Nessuna persona ha lo stesso ruolo due volte nello stesso film.
-
-- Registi (sezione 5):
-	887 film senza un Director: 771 perché la crew è vuota, 116 hanno una crew ma nessun regista.
-	91,0% dei film ha un solo regista, 6,0% due, 1,1% tre o più.
-
-- Persone con più nomi (sezione 6):
-	15 persone (stesso id) compaiono con due nomi diversi: è lo stesso nome scritto in un altro
-	alfabeto (es. 'Morris Chestnut' / 'Моррис Честнат', 'Jason Momoa' / '杰森·莫玛').
-	-> le query sulle persone vanno fatte sull'id, non sul nome.
-
-- Persone con più generi (sezione 6):
-	12 persone hanno gender diverso in film diversi, ma sempre "0 in alcuni film e 1 (o 2) in altri":
-	nessuna persona risulta sia donna che uomo. Quindi non è una contraddizione,
-	solo il dato è stato inserito in alcuni film e non in altri.
-	-> per ogni persona si può usare il genere specificato quando c'è.
-
-- Omonimi (sezione 6):
-	8.347 nomi sono usati da più persone diverse (es. 'Michael Davis' 11 id diversi).
-	Possono essere davvero persone diverse: altra ragione per lavorare sull'id e non sul nome.
-
-- credit_id: nessuno ripetuto, è davvero un codice univoco.
-
-- Collegamento con movies_metadata (sezione 7):
-	3 film di credits non sono tra i film validi di movies_metadata: sono Midnight Man (82663),
-	Mardock Scramble (122662) e Avalanche Sharks (249260), i 3 film con la riga spezzata.
-	1 film di movies_metadata non ha i credits: School's out (401840), 0 voti.
-	Esattamente la stessa situazione di keywords.csv.
+TO DO
+	- remove the duplicated movies (keep one copy per id)
+	- remove the spaces (normal, tab, \xa0) at the start and at the end of the names
+	- treat gender = 0 as "not specified", not as a third gender
 
 
-Quello che emerge (sezione 8)
-- In media 12,4 attori per film (mediana 10, massimo 313) e 10,2 persone di crew (mediana 6, massimo 435).
-- Attori presenti in più film: Bess Flowers (240), Christopher Lee (148), John Wayne (125),
-  Samuel L. Jackson (123), Michael Caine e Gérard Depardieu (110).
-- Registi con più film: John Ford (68), Michael Curtiz (65), Werner Herzog (55), Alfred Hitchcock (53).
-- Nel cast gli uomini sono il 40,3%, le donne il 19,9% (il resto non specificato);
-  nella crew uomini 34,6%, donne 6,7%.
+Logical checks
+
+- Same person several times in the same movie (section 4):
+	it happens in 951 movies, for 1,156 people.
+	1,152 play DIFFERENT characters: this is normal (an actor with several roles), but be careful:
+	if the movies of an actor are counted by counting the cast rows, these movies are counted twice.
+	-> count the distinct (movie, actor) pairs.
+	4 people appear twice with the same character, and the script shows that the character is empty:
+	they are real duplicates.
+
+- cast_id repeated in the same movie: 12 movies.
+
+- order field (section 4):
+	we expect 0, 1, 2, ... without repetitions, but:
+	- in 87 movies two actors have the same order (e.g. movie 25: Jake Gyllenhaal and Scott MacDonald both 1)
+	- in 6,314 movies the first value is NOT 0 (in 6,033 movies it starts from 1)
+	- in 5,948 movies some numbers are missing (e.g. 0, 1, 3)
+	-> to find the "first actor" of a movie you cannot look for order = 0: in 6,314 movies it does not exist.
+	   The actor with the lowest order must be taken.
+
+- Crew departments and roles (section 5):
+	12 departments; 456 different roles (job).
+	8 roles appear in more than one department (e.g. 'Art Direction' in Art and in Crew; 'Other' in 10 departments).
+	The 'Actors' department contains 19 people (Actor 9, Stunt Double 8, Voice 2): actors that ended up in the crew.
+	The 'Director' role is always in the Directing department: to find directors, job = 'Director' is enough.
+	No person has the same role twice in the same movie.
+
+- Directors (section 5):
+	887 movies without a Director: 771 because the crew is empty, 116 have a crew but no director.
+	91.0% of the movies have a single director, 6.0% two, 1.1% three or more.
+
+- People with several names (section 6):
+	15 people (same id) appear with two different names: it is the same name written in another
+	alphabet (e.g. 'Morris Chestnut' / 'Моррис Честнат', 'Jason Momoa' / '杰森·莫玛').
+	-> queries on people must be done on the id, not on the name.
+
+- People with several genders (section 6):
+	12 people have a different gender in different movies, but always "0 in some movies and 1 (or 2) in others":
+	no person is both female and male. So it is not a contradiction,
+	the value was simply entered in some movies and not in others.
+	-> for each person the specified gender can be used when present.
+
+- Namesakes (section 6):
+	8,347 names are used by several different people (e.g. 'Michael Davis' 11 different ids).
+	They may really be different people: another reason to work on the id and not on the name.
+
+- credit_id: none repeated, it really is a unique code.
+
+- Link with movies_metadata (section 7):
+	3 movies of credits are not among the valid movies of movies_metadata: they are Midnight Man (82663),
+	Mardock Scramble (122662) and Avalanche Sharks (249260), the 3 movies with the broken row.
+	1 movie of movies_metadata has no credits: School's out (401840), 0 votes.
+	Exactly the same situation as keywords.csv.
+
+
+What emerges (section 8)
+- On average 12.4 actors per movie (median 10, maximum 313) and 10.2 crew members (median 6, maximum 435).
+- Actors in the most movies: Bess Flowers (240), Christopher Lee (148), John Wayne (125),
+  Samuel L. Jackson (123), Michael Caine and Gérard Depardieu (110).
+- Directors with the most movies: John Ford (68), Michael Curtiz (65), Werner Herzog (55), Alfred Hitchcock (53).
+- In the cast men are 40.3%, women 19.9% (the rest not specified);
+  in the crew men 34.6%, women 6.7%.

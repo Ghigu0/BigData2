@@ -1,0 +1,241 @@
+DATA CLEANING AND DATABASE POPULATION
+
+Files
+	cleaning.py     the cleaning rules, one function per rule
+	populate.py     reads the CSVs, applies the rules, builds the documents and inserts them into MongoDB
+
+
+
+Order of operations (populate.py)
+	1. connection with DbConnector (1 = docker, 2 = VM)
+	2. cleaning of movies_metadata, keywords and credits, and construction of the movie documents
+	3. cleaning of links and translation movieId (MovieLens) -> TMDB id
+	4. drop of the movies and ratings collections and new creation with the validator (Structure/create_structure.py),
+	   so the script can be run again from scratch
+	5. insertion of the movies, then of the ratings in batches of 1 million rows
+	6. creation of the indexes, after the insertions (inserting 26 million ratings without indexes is faster)
+	7. printing of the "Cleaning summary"
+
+	Every rule counts how many rows or values it modifies. The counts are printed at the end in the
+	"Cleaning summary" of populate.py: all the numbers in this report can be found there.
+	The validator of the collections (create_structure.py) checks the types and fields of every document:
+	a wrong document makes the insertion fail.
+
+
+GENERAL CONVENTIONS
+
+	missing single value      -> null (the field is always present: all documents have the same shape)
+	empty list                -> []   (e.g. movies without keywords or without cast)
+	strings                   -> leading and trailing spaces, tabs and \xa0 removed; an empty string becomes null
+	gender                    -> 1 = female, 2 = male, null = not specified (TMDB's 0)
+	dates                     -> MongoDB Date (release_date and timestamp of the ratings)
+
+
+
+MOVIES_METADATA.CSV
+
+1 Broken rows (3 movies)
+	Midnight Man (82663), Mardock Scramble: The Third Exhaust (122662) and Avalanche Sharks (249260) are
+	split over two rows by a newline inside overview, written without quotes in the CSV. These rows are joined to rebuild the original record
+
+2 Duplicated ids (29 ids, 30 extra rows)
+	The last copy in the file is kept.
+	- 16 ids have identical copies: keeping one or the other is the same.
+	- 2 ids differ in vote_count: the copy further down in the file has more votes, so it is the most recent.
+	- 11 ids differ only in popularity: there is no direct way to know which one is more recent.
+	  Following the hint of the 2 previous cases (the rows at the end of the file were downloaded later)
+	  the last copy is kept here too. It is a reasonable assumption based on 2 cases, not a certainty,
+	  and the popularity differences are almost always small.
+
+
+3 Budget and revenue
+	- 0 -> null: in the dataset 0 means "unknown" (budget is missing in 80% of the movies, revenue in 84%).
+	- Values between 1 and 999 -> null: a movie does not cost 5 dollars. They are data entry errors on TMDB made
+	  in different ways: some values are in millions (Every Which Way But Loose: budget 5, revenue 85),
+	  others in thousands (Cowspiracy: 117), others are typos (The Karate Kid, Part II: 113).
+	  They cannot be fixed automatically: multiplying by one million would fix some cases
+	  and break others. They are therefore treated as missing.
+	  244 budgets and 154 revenues are lost out of about 8,900 and 7,400 known values (2-3%), but queries 1 and 4
+	  (median and total revenue) are not distorted by revenues of 12 dollars.
+	  Limitation: the rare genuine small values (e.g. The Great Train Robbery, 1903, budget 150) become null.
+	-> "budget 0 -> null": 36,553, "revenue 0 -> null": 38,035
+	-> "budget between 1 and 999 -> null": 244, "revenue between 1 and 999 -> null": 154
+
+4 Runtime
+	0 -> null (as for money, 0 means "unknown"); empty values become null too.
+	The 16 runtimes above 600 minutes are kept: they are TV series (e.g. Centennial, 1,256 minutes), the value is real.
+	-> "runtime 0 -> null": 1,558 (plus the empty values: 1,815 movies without runtime in total)
+
+5 vote_average
+	- average 0 with at least one vote -> null (99 movies): it is impossible, because the minimum rating on TMDB is 0.5.
+	  The average was not computed.
+	- "vote_average 0 with vote_count > 0 -> null": 99
+
+6 Placeholder overviews -> null
+	Some overviews are not empty but contain a standard TMDB sentence instead of the plot.
+	If they were kept, the text search of query 7 would find them (searching for "found" would return 133 movies).
+	Strings treated as a missing overview (case-insensitive comparison):
+		"No overview found."              133
+		"No Overview" / "No overview"     7 + 1
+		"No movie overview available."    3
+		"No overview yet."                2
+	Limitation: the EDA only finds placeholders repeated over several movies; a variant written only once
+	is not recognized.
+	-> "placeholder overview -> null": 146
+
+7 Spoken languages (spoken_languages)
+	- 59 language codes NEVER have a name in the file (e.g. "hy", "km"). The name is rebuilt from the
+	  code with a fixed dictionary (MISSING_LANGUAGE_NAMES in cleaning.py). For these 59 the
+	  English name is used (e.g. "hy" -> "Armenian"), while the other languages keep the name from the file, which is
+	  written in the language itself (e.g. "Español").
+	  -> "empty language names rebuilt from the code": 498 (language objects fixed)
+	- If original_language is not among the spoken languages, it is appended to the list, with the name
+	  taken from the same code -> name dictionary.
+	  The original language of a movie is by definition spoken in the movie.
+
+	  -> "original_language added to spoken_languages (list not empty)": 2,753
+	  -> "original_language added to spoken_languages (empty list)": 3,827
+
+8 Other fields
+	- adult, video: "True"/"False" -> bool.
+	- release_date: YYYY-MM-DD string -> Date; empty -> null.
+	- imdb_id, homepage, tagline, status, poster_path, title, original_language: empty -> null.
+	- belongs_to_collection: object or null.
+
+
+9 What we do NOT modify (and why)
+	These are logical inconsistencies, not structural ones: they cannot be fixed from the data and the values
+	might even be true. They stay in the database and must be kept in mind in the queries.
+	- unreliable status: 229 Rumored movies with a past date and votes, 81 movies with an empty status (null),
+	  17 Released movies with a future date. status is not used to discard movies.
+	- 31 movies with a date after the moment the dataset was downloaded.
+
+
+
+KEYWORDS.CSV
+
+1 Duplicates
+	985 ids appear more than once, always with identical copies: one copy is kept.
+	-> "duplicated rows dropped": 987
+
+2 Spaces in names
+	Leading and trailing spaces and \xa0 are removed from the names (68 keywords).
+	-> "names with spaces at the start or end stripped": 68
+	Spaces are invisible, but for MongoDB 'bellhop' and 'bellhop\xa0' are two different strings:
+	an exact search on the name would not find the version with the space, and grouping by name
+	the same word would appear twice with different counts. It is an invisible error, because
+	looking at the results the two versions seem identical. Removing the spaces also brings
+	out the keywords with the same name and different ids, merged in point 3.
+
+
+3 Same word with two ids
+	After removing the spaces, 6 identical words have two ids: the clean version and the one with the space
+	(infatuation, telephone call, tape recording, bellhop, poseidon, hipster). For TMDB they are different
+	keywords, but for a reader they are the same word: without merging them {"keywords.name": "bellhop"}
+	would find 1 movie instead of 5. The id of the version written without spaces is used.
+	-> "keyword ids merged into the id of the same name without spaces": 6
+
+4 Movies without keywords
+	Movies without a row in keywords.csv (School's out, 401840) or with an empty list have keywords = [].
+	-> "films without keywords": 14,341 (31.6%)
+
+
+
+CREDITS.CSV
+
+1 Duplicates
+	43 ids appear more than once. 36 have identical copies; in the other 7 only the order
+	of the people in the crew changes (same credit_ids, no different value). The first copy is kept.
+	-> "duplicated rows dropped": 44
+
+2 A single name and a single gender per person
+	In the chosen structure the data of a person is repeated in each of their movies (embedding). To avoid
+	having the same person written in different ways, before inserting we choose for each id:
+	- the name: leading and trailing spaces, tabs and \xa0 removed, then the most frequent name among their
+	  movies (on a tie, the first one found). This concerns the 15 people written in two alphabets
+	  (e.g. 'Jason Momoa' / '杰森·莫玛') and the names with spaces (e.g. 'Stuart Reynolds ').
+	- the gender: the specified one (1 or 2) when it is present in at least one movie. 12 people have 0 in
+	  some movies and 1 or 2 in others, never both 1 and 2: it is not a contradiction, the value was only
+	  entered in some movies.
+	- gender 0 becomes null ("not specified"), not a third gender. Query 6 ignores the nulls.
+	The 72 people who, after removing the spaces, have the same name as another person are NOT
+	merged: from the data it is impossible to tell whether they are the same person or two namesakes. The queries work on ids.
+	-> "people with more than one name, one name chosen": 15
+	-> "people with gender set only in some films, set gender used everywhere": 12
+	-> "cast/crew entries whose name changed": 512 / 551
+	-> "cast/crew entries with gender 0 -> set gender of the person": 50 / 9
+	-> "cast/crew entries with gender 0 -> null": 223,713 / 272,023
+
+3 Duplicates in the cast
+	4 people appear twice in the same movie with the same (empty) character: they are real
+	duplicates and the first entry is kept. People with several different characters in the same movie
+	(1,152) are kept: an actor can have several roles. To count the movies of an actor, the distinct
+	(movie, actor) pairs must be counted.
+	-> "cast entries duplicated (same person and character in a film), removed": 4
+
+4 Other fields
+	- empty character -> null.
+	- missing profile_path -> null.
+	- order, cast_id and credit_id stay as in the file. order does not always start from 0 and has gaps and
+	  repetitions: for the top 5 actors (query 6) the cast is sorted by order, instead of looking for order = 0.
+	- The 19 actors that ended up in the 'Actors' department of the crew stay there: the queries on directors use
+	  job = 'Director', which is always in the Directing department.
+
+5 Movies without credits
+	School's out (401840) has no row in credits.csv: cast = [] and crew = [].
+	Thanks to the stitching of the broken rows, all the movies of credits.csv are in movies.
+	-> "films without a row in credits.csv": 1, no "films not in movies, ignored"
+
+
+LINKS.CSV
+
+links.csv is only used during loading, as the translation table
+ratings.movieId -> links.tmdbId = movies._id. The movieId kept for each movie becomes movielens_id.
+
+
+1 movieIds without tmdbId (219): they cannot be linked to any movie and are discarded.
+
+2 Shared tmdbIds (29 tmdbIds, 59 movieIds)
+	29 tmdbIds are assigned to several movieIds with different IMDb codes, i.e. different movies for MovieLens.
+	In each group exactly one movieId has the same IMDb code as the movie in movies_metadata:
+	that one is kept and the other 30 are discarded. Their ratings belong to another movie (often with the same title)
+	and would end up on the wrong movie, like "Romance", rated since 1999 but released in 2012 (EDA_ratings).
+
+3 tmdbIds not present in movies (161 movieIds): the movie is not in the dataset, they are discarded.
+
+
+4 Links are made on tmdbId, not on imdbId: in 65 individual cases the IMDb codes of links and
+	movies_metadata are different and it is impossible to tell which of the two is wrong.
+
+	-> "movieIds discarded, movieId without tmdbId": 219
+	-> "movieIds discarded, tmdbId not in movies": 161
+	-> "movieIds discarded, movieId on a shared tmdbId with a different imdb id": 30
+	-> "movieIds kept": 45,433 (every movie in movies has a movielens_id)
+
+
+
+RATINGS.CSV
+
+The file is structurally clean (no missing values, no duplicates, ratings between 0.5 and 5):
+the only cleaning concerns the link to the movies.
+	- movieId translated into the TMDB id of the movie with the cleaned links dictionary (movie_id = movies._id).
+	- Unix timestamp -> Date (UTC).
+
+Ratings discarded because they cannot be correctly linked to a movie:
+
+	movieId without tmdbId                        13,503
+	tmdbId not present in movies                  29,204   (29,219 in the EDA, minus the 15 ratings of the 3 recovered movies)
+	wrong movieId on a shared tmdbId               7,060
+	total                                         49,767   about 0.19% of the ratings
+
+Ratings inserted: 25,974,522.
+
+Kept in the database, because they are not errors:
+	- ratings given before the release of the movie (previews, festivals)
+
+
+RESULT
+
+	movies     45,433 documents   (45,463 rows read - 30 duplicates; the 3 broken rows already joined)
+	ratings    25,974,522 documents
+	indexes    movies: text on overview and tagline; ratings: user_id, movie_id

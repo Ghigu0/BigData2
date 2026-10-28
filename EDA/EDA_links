@@ -1,104 +1,104 @@
-STRUTTURA DEL FILE links.csv
+STRUCTURE OF THE links.csv FILE
 
-Tre colonne, una riga per film di MovieLens. 
-È una tabella "ponte" tra tre siti diversi:
-serve a collegare i voti (ratings.csv, che usano l'id di MovieLens) ai film (movies_metadata.csv,
-che usa l'id di TMDB).
+Three columns, one row per MovieLens movie.
+It is a "bridge" table between three different websites:
+it links the ratings (ratings.csv, which use the MovieLens id) to the movies (movies_metadata.csv,
+which uses the TMDB id).
 
     movieId,	 imdbId,	tmdbId
     1			,0114709,	862          <- Toy Story
 
 - movieId
-	Identificativo del film su MovieLens: è lo stesso movieId di ratings.csv
+	Identifier of the movie on MovieLens: it is the same movieId as in ratings.csv
 
 - imdbId
-	Identificativo del film su IMDb, SENZA il prefisso "tt" e con gli zeri iniziali (0114709).
-	In movies_metadata lo stesso codice è scritto con il prefisso: tt0114709.
-	Va letto come testo: convertendolo in numero si perdono gli zeri iniziali.
+	Identifier of the movie on IMDb, WITHOUT the "tt" prefix and with leading zeros (0114709).
+	In movies_metadata the same code is written with the prefix: tt0114709.
+	It must be read as text: converting it to a number loses the leading zeros.
 
-	in realtà non serve a molto ecco
+	it is actually not very useful
 
 - tmdbId
-	Identificativo del film su TMDB: è lo stesso id di movies_metadata, credits e keywords
+	Identifier of the movie on TMDB: it is the same id as in movies_metadata, credits and keywords
 
     ratings.movieId -> links.movieId -> links.tmdbId -> movies_metadata.id
 
-links_small.csv ha la stessa struttura ed è la versione ridotta da usare con ratings_small.csv.
+links_small.csv has the same structure and is the reduced version to use with ratings_small.csv.
 
 
 
 
 
-CONSIDERAZIONI DAGLI SCRIPT EDA
+FINDINGS FROM THE EDA SCRIPTS
 
 
-- Struttura (sezione 1):
-	links.csv: 45.843 righe; links_small.csv: 9.125 righe.
-	Tutti i valori sono solo cifre. imdbId ha sempre 7 cifre.
-	movieId non è mai ripetuto ed è ordinato (da 1 a 176.279).
+- Structure (section 1):
+	links.csv: 45,843 rows; links_small.csv: 9,125 rows.
+	All values are digits only. imdbId always has 7 digits.
+	movieId is never repeated and is sorted (from 1 to 176,279).
 
 
-- tmdbId mancante (sezione 2):
-	219 movieId (0,48%) non hanno un tmdbId, quindi i loro voti non si possono collegare a nessun film.
-	Sono 13.503 voti su 26.024.289 (0,05%).
-	In links_small mancano 13 tmdbId.
+- Missing tmdbId (section 2):
+	219 movieIds (0.48%) have no tmdbId, so their ratings cannot be linked to any movie.
+	They are 13,503 ratings out of 26,024,289 (0.05%).
+	In links_small 13 tmdbIds are missing.
 
-	li togliamo ? 
+	should we remove them?
 
-- tmdbId usato da più movieId (sezione 3):
-	29 tmdbId sono assegnati a più di un movieId (59 movieId in tutto, 30 in più del necessario).
-	In tutti i 29 casi i movieId hanno imdbId DIVERSI: per MovieLens sono film diversi,
-	ma vengono collegati allo stesso film di TMDB.
-	
-	Confrontando con l'imdb_id di movies_metadata, in ognuno dei 29 gruppi esattamente un movieId
-	ha lo stesso codice IMDb (29 corretti) e gli altri no (30 sbagliati).
-	es. tmdbId 105045 (The Promise): movieId 690 (imdb 0111613, uguale al metadata) e
-	    movieId 1533 (imdb 0117398, diverso).
-	-> 30 movieId puntano al film sbagliato: i loro 9.453 voti (0,04%) finirebbero sul film sbagliato.
+- tmdbId used by several movieIds (section 3):
+	29 tmdbIds are assigned to more than one movieId (59 movieIds in total, 30 more than needed).
+	In all 29 cases the movieIds have DIFFERENT imdbIds: for MovieLens they are different movies,
+	but they are linked to the same TMDB movie.
 
-	Questi 29 tmdbId sono ESATTAMENTE i 29 id duplicati di movies_metadata (anche lì 59 righe, 30 in più).
-	Questo suggerisce che il dataset sia stato costruito scaricando da TMDB i dati di ogni riga di links:
-	un tmdbId presente due volte in links ha prodotto due righe uguali in movies_metadata.
-	Quindi i duplicati di movies_metadata (e di credits/keywords) non sono film diversi, ma l'effetto
-	di questo errore di collegamento.
+	Comparing with the imdb_id of movies_metadata, in each of the 29 groups exactly one movieId
+	has the same IMDb code (29 correct) and the others do not (30 wrong).
+	e.g. tmdbId 105045 (The Promise): movieId 690 (imdb 0111613, same as the metadata) and
+	    movieId 1533 (imdb 0117398, different).
+	-> 30 movieIds point to the wrong movie: their 9,453 ratings (0.04%) would end up on the wrong movie.
 
-
-- Collegamento con movies_metadata (sezione 4):
-	164 tmdbId non corrispondono a nessun film valido di movies_metadata (29.219 voti, 0,11%).
-	3 di questi sono i film con la riga spezzata (Midnight Man, Mardock Scramble, Avalanche Sharks):
-	ricostruendo quelle righe si recuperano.
-	Tutti i film validi di movies_metadata hanno una riga in links.
-
-	Per 95 film l'imdb id di links è diverso da quello di movies_metadata (stesso tmdbId):
-	30 sono i movieId sbagliati del punto precedente, gli altri 65 sono casi singoli
-	(es. Two Friends, Venice, The Sleepover): uno dei due file ha il codice IMDb sbagliato,
-	dai dati non si può dire quale.
-	-> i collegamenti vanno fatti su tmdbId, non su imdbId.
+	These 29 tmdbIds are EXACTLY the 29 duplicated ids of movies_metadata (there too 59 rows, 30 extra).
+	This suggests that the dataset was built by downloading from TMDB the data of every row of links:
+	a tmdbId present twice in links produced two identical rows in movies_metadata.
+	So the duplicates of movies_metadata (and of credits/keywords) are not different movies, but the effect
+	of this linking error.
 
 
-- Collegamento con i ratings (sezione 5):
-	Tutti i movieId votati in ratings.csv sono in links.csv; 728 movieId di links non hanno voti.
-	Tutti i movieId votati in ratings_small.csv sono in links_small.csv; 59 movieId di links_small non hanno voti.
+- Link with movies_metadata (section 4):
+	164 tmdbIds do not match any valid movie of movies_metadata (29,219 ratings, 0.11%).
+	3 of these are the movies with the broken row (Midnight Man, Mardock Scramble, Avalanche Sharks):
+	rebuilding those rows recovers them.
+	All the valid movies of movies_metadata have a row in links.
+
+	For 95 movies the imdb id of links is different from the one in movies_metadata (same tmdbId):
+	30 are the wrong movieIds of the previous point, the other 65 are individual cases
+	(e.g. Two Friends, Venice, The Sleepover): one of the two files has the wrong IMDb code,
+	and from the data it is impossible to tell which.
+	-> links must be made on tmdbId, not on imdbId.
 
 
-- links_small rispetto a links (sezione 6):
-	links_small NON è un sottoinsieme esatto di links: 10 movieId sono solo in links_small.
-	Per i 9.115 movieId presenti in entrambi, imdbId e tmdbId sono identici.
-	-> ok usare links_small per lo sviluppo, ma la versione finale deve usare links.csv.
+- Link with the ratings (section 5):
+	All the movieIds rated in ratings.csv are in links.csv; 728 movieIds of links have no ratings.
+	All the movieIds rated in ratings_small.csv are in links_small.csv; 59 movieIds of links_small have no ratings.
 
 
-COSE DA FARE
-	- leggere imdbId come testo (per non perdere gli zeri)
-	- scartare i movieId senza tmdbId (219) e i voti collegati
-	- per i 29 tmdbId condivisi tenere solo il movieId con lo stesso imdb id di movies_metadata
-	  e scartare gli altri 30 (con i loro voti)
-	- fare i collegamenti su tmdbId
+- links_small compared to links (section 6):
+	links_small is NOT an exact subset of links: 10 movieIds are only in links_small.
+	For the 9,115 movieIds present in both, imdbId and tmdbId are identical.
+	-> links_small is fine for development, but the final version must use links.csv.
 
 
-Quello che emerge
-- Voti che non si possono collegare correttamente a un film:
-	senza tmdbId                   13.503   (0,05%)
-	tmdbId non in movies_metadata  29.219   (0,11%)
-	movieId sbagliati (punto 3)    parte dei 9.453 voti dei movieId condivisi (0,04%)
-  In totale meno dello 0,2% dei 26 milioni di voti: l'impatto sulle query è minimo,
-  ma va gestito per non attribuire voti al film sbagliato.
+TO DO
+	- read imdbId as text (so as not to lose the zeros)
+	- discard the movieIds without tmdbId (219) and the linked ratings
+	- for the 29 shared tmdbIds keep only the movieId with the same imdb id as movies_metadata
+	  and discard the other 30 (with their ratings)
+	- make the links on tmdbId
+
+
+What emerges
+- Ratings that cannot be correctly linked to a movie:
+	without tmdbId                 13,503   (0.05%)
+	tmdbId not in movies_metadata  29,219   (0.11%)
+	wrong movieIds (point 3)       part of the 9,453 ratings of the shared movieIds (0.04%)
+  In total less than 0.2% of the 26 million ratings: the impact on the queries is minimal,
+  but it must be handled so as not to assign ratings to the wrong movie.

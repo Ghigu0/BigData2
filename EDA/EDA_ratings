@@ -1,107 +1,107 @@
-STRUTTURA DEL FILE ratings.csv
+STRUCTURE OF THE ratings.csv FILE
 
-Quattro colonne, una riga per voto: "l'utente userId ha dato il voto rating al film movieId nel momento timestamp".
-I voti vengono da MovieLens (sito diverso da TMDB).
+Four columns, one row per rating: "user userId gave rating rating to movie movieId at time timestamp".
+The ratings come from MovieLens (a different website from TMDB).
 
     userId,	movieId,	rating,		timestamp
     1,		110,		1.0,		1425941529
 
 - userId
-	Identificativo dell'utente di MovieLens (anonimo: non c'è nessun'altra informazione sugli utenti)
+	Identifier of the MovieLens user (anonymous: there is no other information about the users)
 
 - movieId
-	Identificativo del film su MovieLens: si collega ai film tramite links.csv
+	Identifier of the movie on MovieLens: it is linked to the movies through links.csv
 	(ratings.movieId -> links.movieId -> links.tmdbId -> movies_metadata.id)
 
 - rating
-	Voto da 0,5 a 5 (scala diversa da vote_average di movies_metadata, che va da 0 a 10)
+	Rating from 0.5 to 5 (a different scale from movies_metadata's vote_average, which goes from 0 to 10)
 
 - timestamp
-	Momento del voto, in secondi dal 1° gennaio 1970 (formato Unix): 1425941529 = 9 marzo 2015
+	Moment of the rating, in seconds since January 1st 1970 (Unix format): 1425941529 = March 9th 2015
 
 
-CONSIDERAZIONI DAGLI SCRIPT EDA
+FINDINGS FROM THE EDA SCRIPTS
 
 
-- Struttura (sezione 1):
- Nessun valore mancante.
-	
-
-- Valori (sezione 2):
-	rating ha solo i 10 valori attesi (0,5 - 1 - ... - 5), nessun valore fuori scala.
-	Voto più frequente 4 (26,89%), poi 3 (20,20%) e 5 (14,65%). Media 3,528.
-	Voti dal 9 gennaio 1995 al 4 agosto 2017.
-
-- Duplicati (sezione 3):
-	nessuna riga identica e nessun utente che ha votato due volte lo stesso film.
-
-- Utenti e film (sezione 4):
-	270.896 utenti (id da 1 a 270.896, senza buchi), 45.115 film votati.
-
-	                    minimo   mediana   media   massimo   solo 1 voto        meno di 10
-	voti per utente     1        30        96,1    18.276    5.084 (1,88%)      36.993 (13,66%)
-	voti per film       1        8         576,8   91.921    7.659 (16,98%)     23.856 (52,88%)
-
-	-> più della metà dei film ha meno di 10 voti: la media dei voti di questi film non è affidabile
-	   (stesso discorso di vote_average in movies_metadata). Nelle classifiche serve un minimo di voti.
-
-	Un utente (45811) ha dato 18.276 voti, il doppio del secondo (9.279).
-	196 utenti con almeno 20 voti hanno dato sempre lo stesso voto (156 di loro sempre 5).
-	Non sono errori, ma comportamenti anomali che possono pesare sulle medie.
+- Structure (section 1):
+ No missing values.
 
 
-COSE DA FARE
-	- convertire timestamp in data
-	- niente pulizia strutturale: il file è pulito
+- Values (section 2):
+	rating has only the 10 expected values (0.5 - 1 - ... - 5), no out-of-scale values.
+	Most frequent rating 4 (26.89%), then 3 (20.20%) and 5 (14.65%). Average 3.528.
+	Ratings from January 9th 1995 to August 4th 2017.
+
+- Duplicates (section 3):
+	no identical rows and no user who rated the same movie twice.
+
+- Users and movies (section 4):
+	270,896 users (ids from 1 to 270,896, without gaps), 45,115 rated movies.
+
+	                    min      median    mean    max       only 1 rating      fewer than 10
+	ratings per user    1        30        96.1    18,276    5,084 (1.88%)      36,993 (13.66%)
+	ratings per movie   1        8         576.8   91,921    7,659 (16.98%)     23,856 (52.88%)
+
+	-> more than half of the movies have fewer than 10 ratings: the average rating of these movies is not reliable
+	   (same as vote_average in movies_metadata). Rankings need a minimum number of ratings.
+
+	One user (45811) gave 18,276 ratings, twice as many as the second (9,279).
+	196 users with at least 20 ratings always gave the same rating (156 of them always 5).
+	They are not errors, but anomalous behaviours that can weigh on the averages.
 
 
-Controlli logici
-
-- Mezze stelle (sezione 5):
-	fino al 2002 nessun voto ha la mezza stella (0,00% ogni anno); il primo voto con mezza stella
-	è del 18 febbraio 2003, e dal 2004 sono circa il 40-44% dei voti.
-	Quindi le mezze stelle sono state introdotte su MovieLens nel 2003: i voti più vecchi
-	non sono "meno precisi" per scelta degli utenti, semplicemente non era possibile.
-
-- Voti dati prima dell'uscita del film (sezione 6):
-	9.834 voti (0,04%) hanno una data precedente alla release_date del film collegato.
-
-	giorni prima dell'uscita    voti
-	0-7                         31,64%
-	8-30                        19,49%
-	31-365                      33,31%
-	più di 365                  15,56%
-
-	La maggior parte è di pochi giorni o mesi: compatibile con anteprime o festival prima dell'uscita ufficiale.
-	47 film sono stati votati più di un anno prima dell'uscita (1.530 voti).
-	Di questi, 12 hanno un codice IMDb diverso in links.csv e in movies_metadata, e raccolgono 1.090 di quei 1.530 voti.
-	es. movieId 2894 votato dal 1999 ma collegato a "Romance" uscito nel 2012 (codice IMDb diverso).
-	-> conferma che quei movieId sono collegati al film SBAGLIATO in links.csv (vedi EDA_links):
-	   i voti sono di un film degli anni '90, il collegamento porta a un film omonimo più recente.
-	Gli altri casi (codice IMDb uguale) sono film molto attesi votati prima dell'uscita,
-	es. Pirates of the Caribbean: Dead Men Tell No Tales e Thor: Ragnarok.
-
-- Voti collegabili a un film (sezione 7):
-
-	movieId senza tmdbId                            13.503    0,05%
-	tmdbId non presente in movies_metadata          29.219    0,11%
-	movieId sbagliato su un tmdbId condiviso         7.060    0,03%
-	collegabili                                 25.974.507   99,81%
+TO DO
+	- convert timestamp to a date
+	- no structural cleaning: the file is clean
 
 
-- ratings_small rispetto a ratings (sezione 8):
-	nessuna riga di ratings_small è identica a una riga di ratings,
-	ma il 99,67% delle righe di ratings_small si trova in ratings con stesso film, stesso voto e
-	stesso istante (al secondo), cambia solo lo userId.
-	Per 669 utenti su 671, un unico utente di ratings ha almeno il 90% dei loro voti.
-	-> ratings_small contiene (quasi) gli stessi voti di ratings, con gli utenti rinumerati:
-	   l'utente 1 di ratings_small corrisponde all'utente 130461 di ratings.
-	   Quindi uno stesso userId indica persone diverse nei due file: non vanno mai mescolati.
-	ratings_small arriva fino al 16 ottobre 2016, ratings fino al 4 agosto 2017.
+Logical checks
+
+- Half stars (section 5):
+	up to 2002 no rating has a half star (0.00% every year); the first rating with a half star
+	is from February 18th 2003, and from 2004 they are about 40-44% of the ratings.
+	So half stars were introduced on MovieLens in 2003: older ratings
+	are not "less precise" by the users' choice, it simply was not possible.
+
+- Ratings given before the release of the movie (section 6):
+	9,834 ratings (0.04%) have a date earlier than the release_date of the linked movie.
+
+	days before release         ratings
+	0-7                         31.64%
+	8-30                        19.49%
+	31-365                      33.31%
+	more than 365               15.56%
+
+	Most are a few days or months: consistent with previews or festivals before the official release.
+	47 movies were rated more than one year before release (1,530 ratings).
+	Of these, 12 have a different IMDb code in links.csv and in movies_metadata, and collect 1,090 of those 1,530 ratings.
+	e.g. movieId 2894 rated since 1999 but linked to "Romance", released in 2012 (different IMDb code).
+	-> confirms that those movieIds are linked to the WRONG movie in links.csv (see EDA_links):
+	   the ratings are for a movie from the '90s, the link leads to a more recent movie with the same title.
+	The other cases (same IMDb code) are highly anticipated movies rated before release,
+	e.g. Pirates of the Caribbean: Dead Men Tell No Tales and Thor: Ragnarok.
+
+- Ratings that can be linked to a movie (section 7):
+
+	movieId without tmdbId                          13,503    0.05%
+	tmdbId not present in movies_metadata           29,219    0.11%
+	wrong movieId on a shared tmdbId                 7,060    0.03%
+	linkable                                    25,974,507   99.81%
 
 
-Quello che emerge
-- Il file è strutturalmente pulito: nessun valore mancante, nessun duplicato, valori nella scala giusta.
-- Le anomalie sono nei collegamenti con gli altri file (links e movies_metadata), non nei voti:
-  il 99,81% dei voti si collega correttamente a un film.
-- I voti sono molto concentrati: metà dei film ha meno di 10 voti, mentre un film arriva a 91.921.
+- ratings_small compared to ratings (section 8):
+	no row of ratings_small is identical to a row of ratings,
+	but 99.67% of the rows of ratings_small are found in ratings with the same movie, same rating and
+	same instant (to the second), only the userId changes.
+	For 669 users out of 671, a single user of ratings has at least 90% of their ratings.
+	-> ratings_small contains (almost) the same ratings as ratings, with the users renumbered:
+	   user 1 of ratings_small corresponds to user 130461 of ratings.
+	   So the same userId indicates different people in the two files: they must never be mixed.
+	ratings_small goes up to October 16th 2016, ratings up to August 4th 2017.
+
+
+What emerges
+- The file is structurally clean: no missing values, no duplicates, values in the right scale.
+- The anomalies are in the links with the other files (links and movies_metadata), not in the ratings:
+  99.81% of the ratings are correctly linked to a movie.
+- The ratings are very concentrated: half of the movies have fewer than 10 ratings, while one movie reaches 91,921.

@@ -1,5 +1,5 @@
 """
-Creates the structure described in struttura_db.txt: the collections movies and ratings,
+Creates the structure described in db_structure.txt: the collections movies and ratings,
 each with a $jsonSchema validator, and their indexes.
 
     python Structure/create_structure.py              creates/updates the collections

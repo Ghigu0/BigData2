@@ -1,209 +1,198 @@
 - adult
-	Indica se il film è per adulti (True/False)
+	Whether the movie is for adults (True/False)
 
 - belongs_to_collection
-	Saga/franchise a cui appartiene il film (oggetto con id, nome e immagini); vuoto se il film non fa parte di una collezione
+	Saga/franchise the movie belongs to (object with id, name and images); empty if the movie is not part of a collection
 
-    es: {'id': 10194, 'name': 'Toy Story Collection', 'poster_path': '/7G99...jpg', 'backdrop_path': '/9FBw...jpg'}
+    e.g.: {'id': 10194, 'name': 'Toy Story Collection', 'poster_path': '/7G99...jpg', 'backdrop_path': '/9FBw...jpg'}
 
 
 - budget
-	Budget di produzione in dollari (USD)
+	Production budget in dollars (USD)
 
 - genres
-	Lista dei generi del film (oggetti con id e nome, es. Animation, Comedy)
+	List of the movie's genres (objects with id and name, e.g. Animation, Comedy)
 
     [{'id': 16, 'name': 'Animation'}, {'id': 35, 'name': 'Comedy'}, {'id': 10751, 'name': 'Family'}]
 
-     È un codice numerico fisso che TMDB assegna a ciascun genere: lo stesso genere ha sempre lo stesso id in tutti i film. Ad esempio 35 vuol dire sempre "Comedy".
+     It is a fixed numeric code that TMDB assigns to each genre: the same genre always has the same id in every movie. For example 35 always means "Comedy".
 
-    Ho controllato su tutto il file: ci sono 20 generi e ogni id corrisponde sempre a un solo nome.
+    I checked the whole file: there are 20 genres and each id always corresponds to a single name.
 
 - homepage
-	URL del sito ufficiale del film
+	URL of the movie's official website
 
 - id
-	Identificativo del film su TMDB (chiave per collegarsi a credits, keywords e links)
+	Identifier of the movie on TMDB (key to link to credits, keywords and links)
 
 - imdb_id
-	Identificativo del film su IMDb, con prefisso "tt" (es. tt0114709)
+	Identifier of the movie on IMDb, with the "tt" prefix (e.g. tt0114709)
 
-    Id e imdb_id sono identificativi per un film da due siti diversi: The movie database e Interne Movie Database 
+    id and imdb_id are identifiers of a movie on two different websites: The Movie Database and the Internet Movie Database
 
 - original_language
-	Lingua originale del film come codice ISO 639-1 (es. en, fr, it)
+	Original language of the movie as an ISO 639-1 code (e.g. en, fr, it)
 
 - original_title
-	Titolo nella lingua originale
+	Title in the original language
 
 - overview
-	Breve descrizione della trama
+	Short description of the plot
 
 - popularity
-	Punteggio di popolarità calcolato da TMDB (numero decimale, senza un massimo fisso)
+	Popularity score computed by TMDB (decimal number, with no fixed maximum)
 
 - poster_path
-	Percorso dell'immagine della locandina sul sito di TMDB
+	Path of the poster image on the TMDB website
 
 - production_companies
-	Lista delle case di produzione (oggetti con nome e id)
+	List of the production companies (objects with name and id)
 
     [{'name': 'TriStar Pictures', 'id': 559}, {'name': 'Teitler Film', 'id': 2550}, {'name': 'Interscope Communications', 'id': 10201}]
 
-    id di nuovo sarebbe l'id corrispondente alla casa di produzione 
-     
+    again, id is the id of the production company
+
 - production_countries
-	Lista dei paesi di produzione (oggetti con codice ISO 3166-1 e nome)
+	List of the production countries (objects with ISO 3166-1 code and name)
 
 - release_date
-	Data di uscita del film (formato AAAA-MM-GG)
+	Release date of the movie (YYYY-MM-DD format)
 
 - revenue
-	Incasso mondiale in dollari (USD)
+	Worldwide revenue in dollars (USD)
 
 - runtime
-	Durata del film in minuti
+	Duration of the movie in minutes
 
 - spoken_languages
-	Lista delle lingue parlate nel film (oggetti con codice ISO 639-1 e nome)
+	List of the languages spoken in the movie (objects with ISO 639-1 code and name)
 
     [{'iso_639_1': 'en', 'name': 'English'}, {'iso_639_1': 'ru', 'name': 'Pусский'}, {'iso_639_1': 'es', 'name': 'Español'}]
 
 - status
-	Stato del film (Released, Rumored, Post Production, In Production, Planned, Canceled)
+	Status of the movie (Released, Rumored, Post Production, In Production, Planned, Canceled)
 
 - tagline
-	Slogan promozionale del film
+	Promotional tagline of the movie
 
 - title
-	Titolo del film (in inglese)
+	Title of the movie (in English)
 
 - video
-	Indica se si tratta di un contenuto video (True/False) e non di un film vero e proprio
+	Whether it is video content (True/False) and not an actual movie
 
 - vote_average
-	Voto medio degli utenti TMDB (scala 0-10)
-    
+	Average rating of TMDB users (0-10 scale)
+
 - vote_count
-	Numero di voti su cui è calcolata la media vote_average
+	Number of votes the vote_average is computed on
 
 
 
 
 
 
-CONSIDERAZIONI DAGLI SCRIPT EDA 
+FINDINGS FROM THE EDA SCRIPTS
 
 
-- Righe rotte: 
-	sono 3 film, ognuno spezzato in due righe. La trama contiene un a capo: 
-	la prima metà della riga si interrompe a metà di overview. 
-	I film sono Midnight Man, Mardock Scramble e Avalanche Sharks. Tolte queste righe, 
-	restano 45.460 righe valide.
+- Broken rows:
+	there are 3 movies, each split over two rows. The overview contains a newline:
+	the first half of the row stops in the middle of overview.
+	The movies are Midnight Man, Mardock Scramble and Avalanche Sharks. Without these rows,
+	45,460 valid rows remain.
 
-	Direi che si possono ricostruire nel chill 
+	They can easily be rebuilt
 
-- ID duplicati: 
-	29, per un totale di 59 righe. 
-	28 ID compaiono 2 volte mentre un ID ne compare 3 
-	16 ID hanno copie identiche per un totale di 33 righe ( basta tenere una copia )
-	11 ID cambiano solo per popularity
-	2 differiscono per popularity e vote_count ( si tiene il vote count maggiore che è il più recente )
-	Nei 2 casi che possiamo verificare, cioè quelli con vote_count diverso, la copia che compare più avanti nel file è quella più aggiornata. Questo fa pensare che le righe in fondo siano state scaricate dopo.
+- Duplicated IDs:
+	29, for a total of 59 rows.
+	28 IDs appear 2 times while one ID appears 3 times
+	16 IDs have identical copies, for a total of 33 rows (keeping one copy is enough)
+	11 IDs differ only in popularity
+	2 differ in popularity and vote_count (the higher vote count is kept, as it is the most recent)
+	In the 2 cases we can verify, i.e. those with a different vote_count, the copy that appears further down in the file is the most up to date. This suggests that the rows at the end were downloaded later.
 
-	Per le 11 copie con solo popularity diversa ti proporrei quindi di tenere l'ultima occorrenza nel file. I vantaggi:
-	- è una regola unica che vale per tutti e tre i casi: per le copie identiche non cambia nulla, e per quelle con vote_count diverso coincide con la tua regola;
-	- è deterministica e facile da spiegare nel report;
-	- in codice è una riga: drop_duplicates("id", keep="last").
+	For the 11 copies with only a different popularity, the proposal is therefore to keep the last occurrence in the file. The advantages:
+	- it is a single rule that works for all three cases: nothing changes for identical copies, and for those with a different vote_count it matches the previous rule;
+	- it is deterministic and easy to explain in the report;
+	- in code it is one line: drop_duplicates("id", keep="last").
 
-- Valori mancanti: budget 80%, revenue 84%, homepage 83%, tagline 55%, production_companies vuoto 26%.
-	La durata manca o è 0 in 1.815 film ovvero il 4%
+- Missing values: budget 80%, revenue 84%, homepage 83%, tagline 55%, empty production_companies 26%.
+	The runtime is missing or 0 in 1,815 movies, i.e. 4%
 
-- Nessun problema su tipi, formato di imdb_id, codici lingua e campi annidati: si leggono tutti e ogni 
-	id corrisponde sempre allo stesso nome.
+- No problems with types, imdb_id format, language codes and nested fields: they can all be read and every
+	id always corresponds to the same name.
 
-- 59 lingue hanno name vuoto
-	questo significa che ci sono 59 codici di lingua che non hanno MAI il nome associato. Non è un problema perchè da il codice si ricostruire la lingua e, le query sulla lingua si dovrebbero fare sul codice. Nonostrante ciò si può tranquillamente ricostruire il campo mancante.
+- 59 languages have an empty name
+	this means there are 59 language codes that NEVER have an associated name. It is not a problem because the language can be rebuilt from the code, and queries on languages should be done on the code. Nevertheless, the missing field can easily be rebuilt.
 
-	su un totale di 133 lingue, 74 hanno sempre il nome e 59 non lo hanno mai 
+	out of a total of 133 languages, 74 always have the name and 59 never have it
 
-- Durate enormi: 16 film durano più di 600 minuti. Sono serie TV, ad esempio Centennial con 1.256 
-	minuti. 
-
-
-- Date strane: 4 film sono precedenti al 1888, ma sono corretti: sono i primissimi filmati della 
-	storia. 31 film hanno una data successiva al momento in cui è stato scaricato il dataset.
-
-- Trame segnaposto: "No overview found." compare in 133 film, più varianti come "No Overview".
-	Cosa comporta
-	- Nella pulizia vanno trasformate in valore mancante, come i campi vuoti.
-	- Se non le pulisci, una ricerca testuale sulla trama le trova. Ad esempio, cercando la parola "found" escono 133 film che non c'entrano nulla.
-
-	Limite del controllo
-	Trova solo i segnaposto ripetuti almeno due volte. Una variante scritta in modo unico, ad esempio "Overview not available", comparirebbe in un solo film e lo script non la vedrebbe. È probabile che siano casi rari, ma non è garantito.
+- Huge runtimes: 16 movies last more than 600 minutes. They are TV series, for example Centennial with 1,256
+	minutes.
 
 
-COSE DA FARE 
-	-sistemare gli id duplicati 
-	-fixare le righe rotte
-	- ricostruire le lingue
-	- eliminare il segnaposto nella trama
+- Strange dates: 4 movies are earlier than 1888, but they are correct: they are the very first films in
+	history. 31 movies have a date after the moment the dataset was downloaded.
 
-Controlli logici
+- Placeholder overviews: "No overview found." appears in 133 movies, plus variants such as "No Overview".
+	Consequences
+	- During cleaning they must be turned into missing values, like the empty fields.
+	- If they are not cleaned, a text search on the overview finds them. For example, searching for the word "found" returns 133 unrelated movies.
 
-- Rumored Film:
-	ma con dati da film uscito: 11 hanno incassi e la maggior parte ha voti. Tutti i 229 Rumored hanno una data di uscita già passata. Questo conferma che status è poco affidabile.
-
-- Released Film:
-	78 film non hanno la data di uscita. Altri 17 risultano Released con una data nel futuro.
-
-- Status vuoto:
-	81 film, quasi tutti con data e voti, quindi in realtà sono usciti.
-
-- Voti: 190 film hanno media 10 con meno di 10 voti ( è fattibile, è solo inaffidabile), e 99 hanno 
-	media 0 pur avendo voti ( che è impossibile ) 
-
-- Soldi con unità sbagliate: 244 film hanno un budget tra 1 e 999 dollari. Ad esempio Modern Times ha 
-	budget 1 e incasso 8,5 milioni, quindi il budget era scritto "in milioni". Ci sono anche incassi di 12 dollari a fronte di budget da 23 milioni.
-
-	qui la situazione è un mezzo casino in realtà
+	Limitation of the check
+	It only finds placeholders repeated at least twice. A variant written in a unique way, for example "Overview not available", would appear in a single movie and the script would not see it. Such cases are probably rare, but it is not guaranteed.
 
 
-- Lingue: in 2.764 film la lingua originale non è tra quelle parlate.
-	da correggere solo le query ricadono sulle lingue parlate 
+TO DO
+	- fix the duplicated ids
+	- fix the broken rows
+	- rebuild the languages
+	- remove the placeholder overviews
+
+Logical checks
+
+- Rumored movies:
+	but with the data of a released movie: 11 have revenue and most have votes. All 229 Rumored movies have a release date already in the past. This confirms that status is unreliable.
+
+- Released movies:
+	78 movies have no release date. Another 17 are Released with a date in the future.
+
+- Empty status:
+	81 movies, almost all with a date and votes, so they were actually released.
+
+- Votes: 190 movies have an average of 10 with fewer than 10 votes (it is possible, just unreliable), and 99 have
+	an average of 0 despite having votes (which is impossible)
+
+- Money with wrong units: 244 movies have a budget between 1 and 999 dollars. For example Modern Times has
+	budget 1 and revenue 8.5 million, so the budget was written "in millions". There are also revenues of 12 dollars against budgets of 23 million.
+
+	the situation here is actually quite messy
 
 
-COSA FARE:
-	- boh, sono incongruenze logiche e non strutturali
+- Languages: in 2,764 movies the original language is not among the spoken ones.
+	to be fixed only if the queries rely on the spoken languages
 
 
-Quello che emerge
-- Status: il 99,0% dei film è Released. Gli altri status, vuoto compreso, sommano circa l'1%.
-- Completezza dei campi:
-  - quasi sempre presenti: titolo, data, imdb_id, poster (più del 99%);
-  - poi durata 96%, generi 94,6%, lingue 91,6%, case di produzione 73,9%;
-  - budget noto solo nel 19,5% dei film, incasso nel 16,3%, entrambi solo nell'11,8%. Le query su soldi e guadagni lavoreranno su circa 5.000 film.
-- Date: il 53% dei film è uscito dal 2000 in poi. Il più vecchio è del 1874.
-- Generi: Drama è nel 44,6% dei film e Comedy nel 29%. Il 5,4% non ha nessun genere.
-- Lingue:
-  - inglese come lingua originale nel 71%;
-  - nel 6,1% dei film la lingua originale non è tra quelle parlate;
-  - nell'8,4% i dati sulle lingue parlate mancano.
-- Paesi di produzione: Stati Uniti nel 46,5% dei film, poi Regno Unito e Francia con circa il 9% ciascuno.
-- Voti:
-  - il 49,6% dei film ha meno di 10 voti;
-  - solo il 2,5% ne ha più di 1.000;
-  - sui film con almeno 10 voti la mediana è 6,3.
-- Durata: il 76% dei film dura tra 70 e 119 minuti. Il 4% ha durata 0 o mancante.
-- Collezioni: il 9,9% dei film fa parte di una saga. La più grande nel dataset è The Bowery Boys con 29 film; James Bond ne ha 26.
+WHAT TO DO:
+	- nothing to fix here: these are logical inconsistencies, not structural ones
 
 
-
-
-
-
-
-
-
-
-
+What emerges
+- Status: 99.0% of the movies are Released. The other statuses, empty included, add up to about 1%.
+- Field completeness:
+  - almost always present: title, date, imdb_id, poster (more than 99%);
+  - then runtime 96%, genres 94.6%, languages 91.6%, production companies 73.9%;
+  - budget known in only 19.5% of the movies, revenue in 16.3%, both in only 11.8%. The queries on money and earnings will work on about 5,000 movies.
+- Dates: 53% of the movies were released from 2000 onwards. The oldest is from 1874.
+- Genres: Drama is in 44.6% of the movies and Comedy in 29%. 5.4% have no genre.
+- Languages:
+  - English as the original language in 71%;
+  - in 6.1% of the movies the original language is not among the spoken ones;
+  - in 8.4% the spoken languages data is missing.
+- Production countries: United States in 46.5% of the movies, then United Kingdom and France with about 9% each.
+- Votes:
+  - 49.6% of the movies have fewer than 10 votes;
+  - only 2.5% have more than 1,000;
+  - for movies with at least 10 votes the median is 6.3.
+- Runtime: 76% of the movies last between 70 and 119 minutes. 4% have a runtime of 0 or missing.
+- Collections: 9.9% of the movies are part of a saga. The largest in the dataset is The Bowery Boys with 29 movies; James Bond has 26.
