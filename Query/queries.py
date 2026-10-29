@@ -87,8 +87,8 @@ class QueryRunner:
         self.ratings = self.db["ratings"]
 
 
-    """Top 10 directors (>= 5 movies) by median revenue"""
     def query_1(self):
+        """Top 10 directors (>= 5 movies with revenue) by median revenue"""
         
         pipeline = [
             {"$project": {"revenue": 1, "vote_average": 1, "director": DIRECTORS}},
@@ -121,10 +121,11 @@ class QueryRunner:
         show(rows, ["director", "movies", "movies with revenue", "median revenue (USD)", "mean vote_average"])
 
 
-'''
-List actor pairs have co-starred in ≥ 3 movies together, their number of co-appearances, and their average movie vote_average. Sort by number of co-appearances.
-'''
+    '''
+    List actor pairs have co-starred in ≥ 3 movies together, their number of co-appearances, and their average movie vote_average. Sort by number of co-appearances.
+    '''
     def query_2(self):
+        """Actor pairs who co-starred in >= 3 movies, by number of co-appearances"""
       
         pipeline = [
             {"$project": {"vote_average": 1, "a": ACTORS, "b": ACTORS}},
@@ -160,6 +161,7 @@ List actor pairs have co-starred in ≥ 3 movies together, their number of co-ap
      List the top 10 actors (with ≥ 10 credited movies) that have the widest genre breadth. Report the actor, the number of distinct genres they've appeared in, and up to 5 example genres.
     '''
     def query_3(self):
+        """Top 10 actors (>= 10 movies) with the widest genre breadth"""
   
         pipeline = [
             {"$project": {"genres": "$genres.name", "actor": ACTORS}},
@@ -200,11 +202,12 @@ List actor pairs have co-starred in ≥ 3 movies together, their number of co-ap
         show([[a["name"], a["movies"], a["genre_count"], ", ".join(a["examples"])] for a in actors[:10]],
              ["actor", "movies", "distinct genres", "most frequent genres"])
 
-'''
-For film collections (belongs_to_collection.name not null) with ≥ 3 movies, which 10 collections have the largest total revenue?
-For each, report movie count, total revenue, median vote_average, and the earliest → latest release date.
-'''
+    '''
+    For film collections (belongs_to_collection.name not null) with ≥ 3 movies, which 10 collections have the largest total revenue?
+    For each, report movie count, total revenue, median vote_average, and the earliest → latest release date.
+    '''
     def query_4(self):
+        """Top 10 collections (>= 3 movies) by total revenue"""
       
         pipeline = [
             {"$match": {"belongs_to_collection.name": {"$ne": None}}},
@@ -233,12 +236,13 @@ For each, report movie count, total revenue, median vote_average, and the earlie
         show(rows, ["collection", "movies", "movies with revenue", "total revenue (USD)",
                     "median vote_average", "release dates"])
 
-'''
-By decade (e.g., 1970s, 1980s, ...) and primary genre (first element in genres),
-what is the median runtime and movie count?​
-List results sorted by decade then median runtime (desc).
-'''
+    '''
+    By decade (e.g., 1970s, 1980s, ...) and primary genre (first element in genres),
+    what is the median runtime and movie count?​
+    List results sorted by decade then median runtime (desc).
+    '''
     def query_5(self):
+        """Median runtime and movie count by decade and primary genre"""
      
         pipeline = [
             {"$match": {"release_date": {"$ne": None}, "runtime": {"$ne": None}, "genres.0": {"$exists": True}}},
@@ -256,12 +260,12 @@ List results sorted by decade then median runtime (desc).
         show(rows, ["decade", "primary genre", "median runtime (min)", "movies"])
 
 
-'''
-For each movie’s top-billed 5 cast (by order), what is the proportion of female
-cast?​
-Aggregate by decade and list decades sorted by average female proportion
-(desc), including movie counts used. Unknown gender may be ignored.
-'''
+    '''
+    For each movie’s top-billed 5 cast (by order), what is the proportion of female
+    cast?​
+    Aggregate by decade and list decades sorted by average female proportion
+    (desc), including movie counts used. Unknown gender may be ignored.
+    '''
     def query_6(self):
         """Proportion of women among the 5 top-billed actors, by decade"""
         pipeline = [
@@ -289,11 +293,11 @@ Aggregate by decade and list decades sorted by average female proportion
         rows = [["%ds" % d["_id"], d["female_proportion"], d["movies"]] for d in decades]
         show(rows, ["decade", "mean female proportion", "movies"])
 
-'''
-Using a text search over overview and tagline, which 20 movies matching “noir”
-or “neo-noir” (and vote_count ≥ 50) have the highest vote_average?​
-Return title, year, vote_average, and vote_count.
-'''
+    '''
+    Using a text search over overview and tagline, which 20 movies matching “noir”
+    or “neo-noir” (and vote_count ≥ 50) have the highest vote_average?​
+    Return title, year, vote_average, and vote_count.
+    '''
     def query_7(self):
         """Top 20 movies about noir / neo-noir (vote_count >= 50) by vote_average"""
         # the text index splits "neo-noir" in "neo" and "noir", so searching "noir" finds both.
@@ -314,11 +318,11 @@ Return title, year, vote_average, and vote_count.
         # no thousands separator, or the years would be printed as 1,960
         show(rows, ["title", "year", "vote_average", "vote_count"], intfmt="")
 
-'''
-Which 20 director–actor pairs with ≥ 3 collaborations (same movie) have the
-highest mean vote_average, considering only movies with vote_count ≥ 100?​
-Include the pair’s films count and mean revenue.​
-'''
+    '''
+    Which 20 director–actor pairs with ≥ 3 collaborations (same movie) have the
+    highest mean vote_average, considering only movies with vote_count ≥ 100?​
+    Include the pair’s films count and mean revenue.​
+    '''
     def query_8(self):
         """Top 20 director-actor pairs (>= 3 movies with vote_count >= 100) by mean vote_average"""
         pipeline = [
@@ -349,12 +353,12 @@ Include the pair’s films count and mean revenue.​
                 for p in pairs]
         show(rows, ["director", "actor", "movies", "mean vote_average", "movies with revenue", "mean revenue (USD)"])
 
-'''
-Among movies where original_language ≠ "en" but at least one production
-company or country is United States, which are the top 10 original languages by
-count?​
-For each language, report the count and one example title.
-'''
+    '''
+    Among movies where original_language ≠ "en" but at least one production
+    company or country is United States, which are the top 10 original languages by
+    count?​
+    For each language, report the count and one example title.
+    '''
     def query_9(self):
         """Top 10 original languages (not English) of movies produced in the United States"""
         # production_companies has only id and name in this dataset, without the country of the
@@ -380,12 +384,12 @@ For each language, report the count and one example title.
         rows = [[l["_id"], l["language"], l["movies"], l["example"]] for l in languages]
         show(rows, ["original_language", "name", "movies", "example title"])
 
-'''
-For each user, what is their ratings count, population variance of ratings, and
-number of distinct genres rated?​
-List the top 10 most genre-diverse users, and separately the top 10
-highest-variance users (only users with ≥ 20 ratings).
-'''
+    '''
+    For each user, what is their ratings count, population variance of ratings, and
+    number of distinct genres rated?​
+    List the top 10 most genre-diverse users, and separately the top 10
+    highest-variance users (only users with ≥ 20 ratings).
+    '''
     def query_10(self):
         """Ratings count, population variance and distinct genres of every user"""
         pipeline = [
