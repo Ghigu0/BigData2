@@ -70,7 +70,7 @@ Missing values, names and genders of people: the cleaning rules are in Populatio
 
 Why embedding for cast, crew, keywords, genres, ...
 	- They are "one-to-few" relationships: on average 12.4 actors and 10.2 crew members per movie,
-	  at most 313 actors and 435 crew members. The largest document weighs about 100 KB,
+	  at most 313 actors and 435 crew members. The largest document weighs about 73 KB,
 	  far below the 16 MB limit.
 	- They are always read together with the movie. Queries 1, 2, 3, 6 and 8 work on actors and directors
 	  of the SAME movie: with cast and crew in the same document, actor-actor and

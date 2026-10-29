@@ -10,7 +10,6 @@ The project covers an exploratory data analysis (EDA) of the original CSV files,
 DbConnector.py                  connection to MongoDB (local Docker or NTNU VM)
 example.py                      example file provided with the assignment
 requirements.txt                Python dependencies
-HOW_TO_RUN.txt                  step-by-step run instructions
 
 EDA/                            exploratory analysis scripts and notes, one folder per CSV file
 Structure/create_structure.py   creates the collections with their JSON Schema validators and indexes
